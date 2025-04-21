@@ -8,7 +8,7 @@
 </head>
 <body>
     <header>
-        <h1>Your YouTube Subscriptions</h1>
+        <h1>Canales Suscriptos de: {{ user_channel_title if user_channel_title else 'Ti' }}</h1>
         <button id="refresh-button">Refresh from YouTube</button>
         <p id="refresh-status"></p>
     </header>

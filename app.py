@@ -4,73 +4,81 @@ import database as db
 import youtube_api as yt
 import os
 import json
-import urllib.parse # Necesario para decodificar tag names en la URL
+import urllib.parse
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
-# Required for session management (used implicitly by OAuth flow sometimes, good practice)
-# In a production app, use a strong, randomly generated secret key
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-replace-in-prod')
 
-# --- Authentication Check ---
 def check_authentication():
     """Checks if the user appears to be authenticated (token exists)."""
-    # Usa la existencia del archivo token definido en youtube_api.py
     return os.path.exists(yt.TOKEN_PICKLE_FILE)
-
-# --- Routes ---
 
 @app.route('/')
 def index():
     """Main page: Displays channels and filters."""
+    user_channel_title = None # Initialize user title
+    service = None # Initialize service
+
     if not check_authentication():
         logging.info("No token file found, attempting authentication...")
         service = yt.get_authenticated_service()
         if not service:
             return "Authentication required or failed. Please ensure you have 'client_secrets.json', necessary permissions, and run the app again to authorize.", 401
-        logging.info("Authentication successful, proceeding to load data.")
+        logging.info("Authentication successful, proceeding.")
+    else:
+        # If token exists, try to build service anyway to get user info
+        service = yt.get_authenticated_service()
+        if not service:
+            # If service fails even with token, force re-auth potentially
+             logging.warning("Token found but failed to build service. Authentication might be needed.")
+             # Optionally redirect to an error page or re-auth flow
+             return "Error connecting to YouTube service. Please try deleting token.pickle and restarting.", 500
+
+    # --- Obtener título del canal del usuario ---
+    if service:
+        user_channel_title = yt.get_my_channel_info(service)
+    # --- Fin obtener título ---
 
     # Fetch data from DB
     channels = db.get_all_channels()
     unique_tags = db.get_unique_tags()
-    tag_colors = db.get_tag_colors() # Obtener colores
+    tag_colors = db.get_tag_colors()
 
-    # Optional: If DB is empty, trigger initial fetch from YouTube API
-    if not channels:
+    # Optional: If DB is empty and we just authenticated, trigger initial fetch
+    if not channels and service and user_channel_title is not None: # Check service to avoid re-auth loop
         logging.info("Database is empty. Fetching subscriptions from YouTube API...")
-        service = yt.get_authenticated_service() # Ensure we have a service object
-        if service:
-            yt_subscriptions = yt.get_all_subscriptions(service)
-            if yt_subscriptions:
-                logging.info(f"Adding {len(yt_subscriptions)} channels to the database.")
-                for sub in yt_subscriptions:
-                    db.add_or_update_channel(
-                        sub['channel_id'],
-                        sub['title'],
-                        sub['thumbnail_url']
-                    )
-                # Re-fetch from DB after adding
-                channels = db.get_all_channels()
-                unique_tags = db.get_unique_tags()
-                # tag_colors will be empty initially, which is fine
-            else:
-                 logging.warning("Fetched no subscriptions from YouTube API.")
-        else:
-             logging.error("Could not get authenticated YouTube service to perform initial fetch.")
-             return "Error: Could not connect to YouTube API after authentication.", 500
+        yt_subscriptions = yt.get_all_subscriptions(service)
+        if yt_subscriptions: # Check if fetch succeeded
+            logging.info(f"Adding {len(yt_subscriptions)} channels to the database.")
+            for sub in yt_subscriptions:
+                db.add_or_update_channel(
+                    sub['channel_id'],
+                    sub['title'],
+                    sub['thumbnail_url']
+                )
+            channels = db.get_all_channels()
+            unique_tags = db.get_unique_tags()
+        elif yt_subscriptions is None: # Explicit check for API failure
+             logging.error("Failed to fetch subscriptions from YouTube API during initial load.")
+             # Show message or handle error - avoid infinite loop if API always fails
+             return "Error fetching subscriptions from YouTube. Please check API status or quotas.", 500
+        else: # API returned empty list
+             logging.warning("Fetched no subscriptions from YouTube API during initial load.")
+
 
     return render_template('index.html',
                            channels=channels,
                            unique_tags=unique_tags,
-                           tag_colors=tag_colors, # Pasar colores a la plantilla
-                           DEFAULT_TAG_COLOR=db.DEFAULT_TAG_COLOR) # Pasar color default
+                           tag_colors=tag_colors,
+                           DEFAULT_TAG_COLOR=db.DEFAULT_TAG_COLOR,
+                           user_channel_title=user_channel_title) # Pasar título a plantilla
 
 
 @app.route('/refresh_from_youtube', methods=['POST'])
 def refresh_from_youtube():
-    """Fetches latest subscriptions from YouTube and updates the database."""
+    """Fetches latest subscriptions, adds new ones, updates existing, and REMOVES unsubscribed."""
     logging.info("Attempting to refresh subscriptions from YouTube API...")
     service = yt.get_authenticated_service()
     if not service:
@@ -80,26 +88,48 @@ def refresh_from_youtube():
     if yt_subscriptions is None: # Check if fetch failed
          return jsonify({"success": False, "message": "Failed to fetch subscriptions from YouTube API."}), 500
 
-    logging.info(f"Fetched {len(yt_subscriptions)} channels from YouTube. Updating database...")
-    # Add/update channels in DB (preserves existing tags)
+    # --- Lógica de Borrado ---
+    logging.info(f"Fetched {len(yt_subscriptions)} channels from YouTube. Comparing with database...")
+    api_channel_ids = {sub['channel_id'] for sub in yt_subscriptions}
+    db_channel_ids = db.get_all_channel_ids()
+
+    ids_to_delete = db_channel_ids - api_channel_ids
+    if ids_to_delete:
+        logging.info(f"Found {len(ids_to_delete)} channels to remove from local DB.")
+        deleted_count = 0
+        for channel_id in ids_to_delete:
+            if db.delete_channel(channel_id):
+                 deleted_count += 1
+        logging.info(f"Successfully removed {deleted_count} channels.")
+    else:
+        logging.info("No channels found to remove from local DB.")
+    # --- Fin Lógica de Borrado ---
+
+    # --- Lógica de Añadir/Actualizar (Existente) ---
+    added_updated_count = 0
+    logging.info("Adding new subscriptions and updating existing ones...")
     for sub in yt_subscriptions:
         db.add_or_update_channel(
             sub['channel_id'],
             sub['title'],
             sub['thumbnail_url']
         )
+        added_updated_count += 1
+    logging.info(f"Processed {added_updated_count} channels for add/update.")
+    # --- Fin Lógica de Añadir/Actualizar ---
+
     logging.info("Database update complete after refresh.")
 
     # Return the updated list of channels and tags/colors for the frontend
     updated_channels = db.get_all_channels()
     updated_tags = db.get_unique_tags()
-    updated_colors = db.get_tag_colors() # Obtener colores actualizados
+    updated_colors = db.get_tag_colors()
     return jsonify({
         "success": True,
-        "message": f"Refreshed {len(yt_subscriptions)} channels from YouTube.",
+        "message": f"Refresh complete. Found {len(yt_subscriptions)} subs. Removed {len(ids_to_delete)}. Processed {added_updated_count}.",
         "channels": updated_channels,
         "unique_tags": updated_tags,
-        "tag_colors": updated_colors # Enviar colores actualizados
+        "tag_colors": updated_colors
         })
 
 
@@ -111,23 +141,20 @@ def update_tags(channel_id):
         return jsonify({"success": False, "message": "Missing 'tags' in request data."}), 400
 
     tags_string = data['tags']
-    # Convert comma-separated string to a list of cleaned tags
     tags_list = [tag.strip() for tag in tags_string.split(',') if tag.strip()]
-
     success = db.update_channel_tags(channel_id, tags_list)
 
     if success:
-        # Return updated tags list, unique tags, and tag colors
         updated_channel_data = next((c for c in db.get_all_channels() if c['channel_id'] == channel_id), None)
         current_tags = updated_channel_data.get('tags', []) if updated_channel_data else []
         unique_tags = db.get_unique_tags()
-        tag_colors = db.get_tag_colors() # Obtener colores
+        tag_colors = db.get_tag_colors()
         return jsonify({
             "success": True,
             "channel_id": channel_id,
-            "tags": current_tags, # Send back the processed list
+            "tags": current_tags,
             "unique_tags": unique_tags,
-            "tag_colors": tag_colors # Enviar colores
+            "tag_colors": tag_colors
         })
     else:
         return jsonify({"success": False, "message": "Failed to update tags in database."}), 500
@@ -141,33 +168,23 @@ def update_tag_color(tag_name):
         return jsonify({"success": False, "message": "Missing 'color' in request data."}), 400
 
     color = data['color']
-    # Validación simple del color (formato #rrggbb o #rgb)
     if not (color.startswith('#') and (len(color) == 7 or len(color) == 4)):
-         # Podríamos permitir nombres de colores CSS aquí si quisiéramos
          return jsonify({"success": False, "message": "Invalid color format (expecting #rrggbb or #rgb)."}), 400
 
-    # Decodificar el tag_name por si tiene caracteres especiales URL-encoded
-    # Ej: si un tag es "C++", en la URL podría ser "C%2B%2B"
     decoded_tag_name = urllib.parse.unquote(tag_name)
-
     success = db.set_tag_color(decoded_tag_name, color)
 
     if success:
-        # Devolver todos los colores actualizados para que JS tenga el mapa completo
         updated_colors = db.get_tag_colors()
         return jsonify({
             "success": True,
             "tag": decoded_tag_name,
             "color": color,
-            "all_colors": updated_colors # Enviar el mapa actualizado
+            "all_colors": updated_colors
             })
     else:
         return jsonify({"success": False, "message": "Failed to update tag color in database."}), 500
 
-
 if __name__ == '__main__':
-    # Ensure DB is created/initialized on first run
     db.init_db()
-    # Note: Setting debug=True enables auto-reload and better error pages
-    # Recommended for development, disable in production.
-    app.run(debug=True, port=5000) # Debug=True está bien para desarrollo local
+    app.run(debug=True, port=5000)

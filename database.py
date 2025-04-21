@@ -1,19 +1,18 @@
 import sqlite3
 import logging
 import json
-import os # Necesario para borrar DB si hay error grave
+import os
 
 DATABASE_NAME = 'subscriptions.db'
-DEFAULT_TAG_COLOR = '#cccccc' # Gris claro por defecto
+DEFAULT_TAG_COLOR = '#cccccc'
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_db_connection():
     """Establishes a connection to the SQLite database."""
     try:
         conn = sqlite3.connect(DATABASE_NAME)
-        conn.row_factory = sqlite3.Row # Return rows as dictionary-like objects
+        conn.row_factory = sqlite3.Row
         return conn
     except sqlite3.Error as e:
         logging.error(f"Database connection error: {e}")
@@ -25,55 +24,50 @@ def init_db():
     if conn:
         try:
             cursor = conn.cursor()
-            # Tabla de canales
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS channels (
                     channel_id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
                     thumbnail_url TEXT,
-                    tags TEXT DEFAULT '[]' -- Store tags as a JSON array string
+                    tags TEXT DEFAULT '[]'
                 )
             ''')
-            # Tabla de colores para tags
             cursor.execute(f'''
-            CREATE TABLE IF NOT EXISTS tag_colors (
-                tag TEXT PRIMARY KEY,
-                color TEXT DEFAULT '{DEFAULT_TAG_COLOR}'
+                CREATE TABLE IF NOT EXISTS tag_colors (
+                    tag TEXT PRIMARY KEY,
+                    color TEXT DEFAULT '{DEFAULT_TAG_COLOR}'
                 )
-            ''') # Usamos f-string para insertar el valor default directamente
+            ''')
             conn.commit()
             logging.info("Database initialized successfully.")
         except sqlite3.Error as e:
-            logging.error(f"Error initializing database table: {e}")
-            # Podríamos considerar borrar el archivo si falla la inicialización
-            # if os.path.exists(DATABASE_NAME):
-            #     conn.close() # Cerrar antes de borrar
-            #     os.remove(DATABASE_NAME)
-            #     logging.warning(f"Removed potentially corrupt DB file: {DATABASE_NAME}")
+            # Asegurarse que el error no sea el de sintaxis anterior
+            if "syntax error" in str(e):
+                 logging.error(f"DATABASE SCHEMA SYNTAX ERROR: {e}")
+                 # Considerar acciones más drásticas si el esquema es inválido
+            else:
+                 logging.error(f"Error initializing database table: {e}")
+
         finally:
             conn.close()
     else:
         logging.error("Could not get DB connection for initialization.")
 
 def add_or_update_channel(channel_id, title, thumbnail_url):
-    """Adds a new channel or updates the title/thumbnail if it already exists, preserving existing tags."""
+    """Adds a new channel or updates the title/thumbnail if it already exists."""
     conn = get_db_connection()
     if conn:
         try:
             cursor = conn.cursor()
-            # Use INSERT OR IGNORE for new channels, then UPDATE for existing ones
             cursor.execute('''
                 INSERT OR IGNORE INTO channels (channel_id, title, thumbnail_url, tags)
                 VALUES (?, ?, ?, '[]')
             ''', (channel_id, title, thumbnail_url))
-
-            # Update title and thumbnail in case they changed, but don't overwrite tags
             cursor.execute('''
                 UPDATE channels
                 SET title = ?, thumbnail_url = ?
                 WHERE channel_id = ?
             ''', (title, thumbnail_url, channel_id))
-
             conn.commit()
         except sqlite3.Error as e:
             logging.error(f"Error adding/updating channel {channel_id}: {e}")
@@ -81,12 +75,11 @@ def add_or_update_channel(channel_id, title, thumbnail_url):
             conn.close()
 
 def update_channel_tags(channel_id, tags_list):
-    """Updates the tags for a specific channel. Expects tags_list as a Python list."""
+    """Updates the tags for a specific channel."""
     conn = get_db_connection()
     success = False
     if conn:
         try:
-            # Store unique tags sorted as JSON string
             unique_sorted_tags = sorted(list(set(tag.strip() for tag in tags_list if tag.strip())))
             tags_json = json.dumps(unique_sorted_tags)
             cursor = conn.cursor()
@@ -113,16 +106,21 @@ def get_all_channels():
     if conn:
         try:
             cursor = conn.cursor()
-            cursor.execute('SELECT channel_id, title, thumbnail_url, tags FROM channels ORDER BY title COLLATE NOCASE ASC')
-            rows = cursor.fetchall()
-            for row in rows:
-                channel_dict = dict(row)
-                # Convert tags JSON string back to list
-                try:
-                    channel_dict['tags'] = json.loads(channel_dict.get('tags', '[]') or '[]')
-                except json.JSONDecodeError:
-                     channel_dict['tags'] = [] # Default to empty list on error
-                channels.append(channel_dict)
+            # Asegurarse que la tabla existe antes de consultar
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='channels';")
+            if cursor.fetchone():
+                 cursor.execute('SELECT channel_id, title, thumbnail_url, tags FROM channels ORDER BY title COLLATE NOCASE ASC')
+                 rows = cursor.fetchall()
+                 for row in rows:
+                    channel_dict = dict(row)
+                    try:
+                        channel_dict['tags'] = json.loads(channel_dict.get('tags', '[]') or '[]')
+                    except json.JSONDecodeError:
+                         channel_dict['tags'] = []
+                    channels.append(channel_dict)
+            else:
+                 logging.warning("Table 'channels' does not exist yet.")
+
         except sqlite3.Error as e:
             logging.error(f"Error fetching all channels: {e}")
         finally:
@@ -144,7 +142,6 @@ def set_tag_color(tag, color):
     if conn:
         try:
             cursor = conn.cursor()
-            # INSERT OR REPLACE: Inserta si no existe, reemplaza si ya existe
             cursor.execute('''
                 INSERT OR REPLACE INTO tag_colors (tag, color)
                 VALUES (?, ?)
@@ -165,16 +162,65 @@ def get_tag_colors():
     if conn:
         try:
             cursor = conn.cursor()
-            cursor.execute('SELECT tag, color FROM tag_colors')
-            rows = cursor.fetchall()
-            for row in rows:
-                # Asegurarse que el color no sea None si la columna permite NULLs (aunque definimos default)
-                colors[row['tag']] = row['color'] if row['color'] else DEFAULT_TAG_COLOR
+             # Asegurarse que la tabla existe
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tag_colors';")
+            if cursor.fetchone():
+                cursor.execute('SELECT tag, color FROM tag_colors')
+                rows = cursor.fetchall()
+                for row in rows:
+                    colors[row['tag']] = row['color'] if row['color'] else DEFAULT_TAG_COLOR
+            else:
+                 logging.warning("Table 'tag_colors' does not exist yet.")
         except sqlite3.Error as e:
             logging.error(f"Error fetching tag colors: {e}")
         finally:
             conn.close()
     return colors
+
+# --- NUEVAS FUNCIONES ---
+def get_all_channel_ids():
+    """Recupera un set con todos los channel_id de la base de datos."""
+    conn = get_db_connection()
+    channel_ids = set()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='channels';")
+            if cursor.fetchone():
+                cursor.execute('SELECT channel_id FROM channels')
+                rows = cursor.fetchall()
+                for row in rows:
+                    channel_ids.add(row['channel_id'])
+            else:
+                 logging.warning("Table 'channels' does not exist for get_all_channel_ids.")
+        except sqlite3.Error as e:
+            logging.error(f"Error fetching all channel IDs: {e}")
+        finally:
+            conn.close()
+    return channel_ids
+
+def delete_channel(channel_id):
+    """Elimina un canal específico de la base de datos."""
+    conn = get_db_connection()
+    success = False
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM channels WHERE channel_id = ?', (channel_id,))
+            conn.commit()
+            # Verificar si se borró algo
+            if cursor.rowcount > 0:
+                 logging.info(f"Deleted channel with ID: {channel_id}")
+                 success = True
+            else:
+                 logging.warning(f"Attempted to delete channel ID {channel_id}, but it was not found.")
+                 success = True # Considerar True si no existía, no es un error de DB
+        except sqlite3.Error as e:
+            logging.error(f"Error deleting channel {channel_id}: {e}")
+        finally:
+            conn.close()
+    return success
+# --- FIN NUEVAS FUNCIONES ---
 
 # Initialize the database when this module is imported
 init_db()
