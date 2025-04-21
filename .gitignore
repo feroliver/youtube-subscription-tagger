@@ -1,0 +1,23 @@
+# Entorno Virtual
+venv/
+
+# Archivos de caché de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Credenciales y Datos Sensibles/Usuario (¡MUY IMPORTANTE!)
+token.pickle
+token.json
+client_secrets.json
+subscriptions.db
+*.log
+
+# Archivos específicos de OS
+.DS_Store
+Thumbs.db
+
+# Archivos de IDEs (opcional, ejemplos)
+.idea/
+.vscode/

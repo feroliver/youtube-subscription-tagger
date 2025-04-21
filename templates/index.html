@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Subscription Tagger</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Your YouTube Subscriptions</h1>
+        <button id="refresh-button">Refresh from YouTube</button>
+        <p id="refresh-status"></p>
+    </header>
+
+    <div class="container">
+        <aside class="filters">
+            <h2>Filter by Tag</h2>
+            <div id="tag-filter-list">
+                <button class="tag-filter active" data-tag="all" style="background-color: #e0e0e0; border-color: #e0e0e0;">Show All</button>
+                {% for tag in unique_tags %}
+                    {% set color = tag_colors.get(tag, DEFAULT_TAG_COLOR) %}
+                    <button class="tag-filter" data-tag="{{ tag }}" style="background-color: {{ color }}; border-color: {{ color }};">
+                        {{ tag }}
+                    </button>
+                {% endfor %}
+            </div>
+             <h2>All Unique Tags (Click to change color)</h2>
+             <div id="all-unique-tags-list" class="tag-list-interactive">
+                {% for tag in unique_tags %}
+                <div class="tag-entry">
+                    {% set color = tag_colors.get(tag, DEFAULT_TAG_COLOR) %} {# Obtener color o usar default #}
+                    <span class="tag-display tag-clickable"
+                          data-tag="{{ tag }}"
+                          style="background-color: {{ color }};">
+                        {{ tag }}
+                    </span>
+                    <div class="color-palette hidden">
+                        <button class="color-option" data-color="#ffadad" style="background-color:#ffadad;" title="#ffadad"></button>
+                        <button class="color-option" data-color="#ffd6a5" style="background-color:#ffd6a5;" title="#ffd6a5"></button>
+                        <button class="color-option" data-color="#fdffb6" style="background-color:#fdffb6;" title="#fdffb6"></button>
+                        <button class="color-option" data-color="#caffbf" style="background-color:#caffbf;" title="#caffbf"></button>
+                        <button class="color-option" data-color="#9bf6ff" style="background-color:#9bf6ff;" title="#9bf6ff"></button>
+                        <button class="color-option" data-color="#a0c4ff" style="background-color:#a0c4ff;" title="#a0c4ff"></button>
+                        <button class="color-option" data-color="#bdb2ff" style="background-color:#bdb2ff;" title="#bdb2ff"></button>
+                        <button class="color-option" data-color="#ffc6ff" style="background-color:#ffc6ff;" title="#ffc6ff"></button>
+                        <button class="color-option" data-color="{{ DEFAULT_TAG_COLOR }}" style="background-color:{{ DEFAULT_TAG_COLOR }};" title="Default Color">Reset</button>
+                    </div>
+                </div>
+                {% endfor %}
+             </div>
+        </aside>
+
+        <main class="channel-list" id="channel-list">
+            <h2>Channels (<span id="channel-count">{{ channels|length }}</span>)</h2>
+            <div id="channels-container">
+                {% if channels %}
+                    {% for channel in channels %}
+                    <div class="channel-card" data-channel-id="{{ channel.channel_id }}" data-tags='{{ channel.tags|tojson|safe }}'>
+                        <img src="{{ channel.thumbnail_url if channel.thumbnail_url else url_for('static', filename='placeholder.png') }}" alt="{{ channel.title }} thumbnail" class="thumbnail">
+                        <div class="channel-info">
+                            <h3>
+                                <a href="https://www.youtube.com/channel/{{ channel.channel_id }}" target="_blank" rel="noopener noreferrer" title="Visit channel on YouTube">
+                                    {{ channel.title }}
+                                </a>
+                            </h3>
+                            <div class="current-tags" id="tags-{{ channel.channel_id }}">
+                                {% for tag in channel.tags %}
+                                    {% set color = tag_colors.get(tag, DEFAULT_TAG_COLOR) %}
+                                    <span class="tag-display" style="background-color: {{ color }};">
+                                        {{ tag }}
+                                    </span>
+                                {% endfor %}
+                            </div>
+                            <div class="tag-input-section">
+                                <input type="text"
+                                       id="input-{{ channel.channel_id }}"
+                                       placeholder="Add tags (comma-separated)"
+                                       value="{{ channel.tags|join(', ') }}">
+                                <button class="save-tags-button" data-channel-id="{{ channel.channel_id }}">Save Tags</button>
+                                <span class="status-message" id="status-{{ channel.channel_id }}"></span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p>No subscriptions found or loaded yet. Try refreshing.</p>
+                {% endif %}
+            </div>
+        </main>
+    </div>
+
+    <script>
+        window.tagColors = {{ tag_colors|tojson|safe }};
+        window.DEFAULT_TAG_COLOR = '{{ DEFAULT_TAG_COLOR }}';
+    </script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

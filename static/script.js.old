@@ -1,0 +1,284 @@
+document.addEventListener('DOMContentLoaded', () => {
+    const channelListContainer = document.getElementById('channels-container');
+    const tagFilterList = document.getElementById('tag-filter-list');
+    const allUniqueTagsList = document.getElementById('all-unique-tags-list');
+    const channelCountSpan = document.getElementById('channel-count');
+    const refreshButton = document.getElementById('refresh-button');
+    const refreshStatus = document.getElementById('refresh-status');
+
+    // --- Event Listeners ---
+
+    // Event delegation for saving tags
+    if (channelListContainer) {
+        channelListContainer.addEventListener('click', async (event) => {
+            if (event.target.classList.contains('save-tags-button')) {
+                const button = event.target;
+                const channelId = button.dataset.channelId;
+                const inputElement = document.getElementById(`input-${channelId}`);
+                const tagsString = inputElement.value.trim();
+                const statusElement = document.getElementById(`status-${channelId}`);
+
+                button.disabled = true; // Prevent double clicks
+                statusElement.textContent = 'Saving...';
+                statusElement.className = 'status-message'; // Reset class
+
+                try {
+                    const response = await fetch(`/api/tags/${channelId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ tags: tagsString }),
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok && result.success) {
+                        updateChannelTagsDisplay(channelId, result.tags);
+                        // Update the card's data attribute for filtering
+                        const card = button.closest('.channel-card');
+                        if(card) {
+                            card.dataset.tags = JSON.stringify(result.tags);
+                        }
+                        updateTagFilters(result.unique_tags); // Update filters if new tags were added/removed globally
+                        statusElement.textContent = 'Saved!';
+                        statusElement.classList.add('success');
+                    } else {
+                        throw new Error(result.message || 'Failed to save tags.');
+                    }
+                } catch (error) {
+                    console.error('Error saving tags:', error);
+                    statusElement.textContent = `Error: ${error.message}`;
+                    statusElement.classList.add('error');
+                } finally {
+                    button.disabled = false;
+                    // Clear status message after a few seconds
+                    setTimeout(() => {
+                         if (statusElement.textContent === 'Saved!' || statusElement.textContent.startsWith('Error:')) {
+                              statusElement.textContent = '';
+                              statusElement.className = 'status-message';
+                         }
+                    }, 3000);
+                }
+            }
+        });
+
+        // Allow pressing Enter in tag input to save
+        channelListContainer.addEventListener('keypress', (event) => {
+             if (event.key === 'Enter' && event.target.tagName === 'INPUT' && event.target.id.startsWith('input-')) {
+                 event.preventDefault(); // Prevent form submission (if any)
+                 const channelId = event.target.id.split('-')[1];
+                 const saveButton = channelListContainer.querySelector(`.save-tags-button[data-channel-id="${channelId}"]`);
+                 if (saveButton) {
+                     saveButton.click();
+                 }
+             }
+        });
+    }
+
+
+    // Event listener for tag filtering
+    if (tagFilterList) {
+        tagFilterList.addEventListener('click', (event) => {
+            if (event.target.classList.contains('tag-filter')) {
+                const selectedTag = event.target.dataset.tag;
+
+                // Update active button style
+                tagFilterList.querySelectorAll('.tag-filter').forEach(button => {
+                    button.classList.remove('active');
+                });
+                event.target.classList.add('active');
+
+                // Filter channels
+                filterChannelsByTag(selectedTag);
+            }
+        });
+    }
+
+    // Event listener for refresh button
+    if (refreshButton) {
+        refreshButton.addEventListener('click', async () => {
+            refreshStatus.textContent = 'Refreshing... please wait.';
+            refreshStatus.className = ''; // Reset style
+            refreshButton.disabled = true;
+
+            try {
+                const response = await fetch('/refresh_from_youtube', { method: 'POST' });
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    refreshStatus.textContent = result.message || 'Refresh successful!';
+                    refreshStatus.classList.add('success');
+                    // Re-render the entire channel list and filters
+                    updateChannelList(result.channels);
+                    updateTagFilters(result.unique_tags);
+                    filterChannelsByTag('all'); // Reset to show all after refresh
+                } else {
+                     throw new Error(result.message || 'Failed to refresh from YouTube.');
+                }
+
+            } catch (error) {
+                console.error('Error refreshing subscriptions:', error);
+                refreshStatus.textContent = `Error: ${error.message}`;
+                refreshStatus.classList.add('error');
+            } finally {
+                refreshButton.disabled = false;
+                 // Clear status message after a few seconds
+                setTimeout(() => {
+                    refreshStatus.textContent = '';
+                    refreshStatus.className = '';
+                }, 5000);
+            }
+        });
+    }
+
+    // --- Helper Functions ---
+
+    function updateChannelTagsDisplay(channelId, tags) {
+        const tagsContainer = document.getElementById(`tags-${channelId}`);
+        if (tagsContainer) {
+            tagsContainer.innerHTML = ''; // Clear existing tags
+            tags.forEach(tag => {
+                const span = document.createElement('span');
+                span.className = 'tag-display';
+                span.textContent = tag;
+                tagsContainer.appendChild(span);
+            });
+        }
+        // Also update the input field to reflect the saved state (cleaned tags)
+        const inputElement = document.getElementById(`input-${channelId}`);
+        if(inputElement) {
+             inputElement.value = tags.join(', ');
+        }
+    }
+
+    function updateTagFilters(uniqueTags) {
+        if (!tagFilterList || !allUniqueTagsList) return;
+
+        // --- Update Filter Buttons ---
+        const currentActiveButton = tagFilterList.querySelector('.tag-filter.active');
+        const currentFilter = currentActiveButton ? currentActiveButton.dataset.tag : 'all';
+
+        tagFilterList.innerHTML = ''; // Clear existing filter buttons
+
+        // Add "Show All" button
+        const allButton = document.createElement('button');
+        allButton.className = 'tag-filter';
+        allButton.dataset.tag = 'all';
+        allButton.textContent = 'Show All';
+        if (currentFilter === 'all') {
+            allButton.classList.add('active');
+        }
+        tagFilterList.appendChild(allButton);
+
+        // Add buttons for each unique tag
+        uniqueTags.forEach(tag => {
+            const button = document.createElement('button');
+            button.className = 'tag-filter';
+            button.dataset.tag = tag;
+            button.textContent = tag;
+            if (currentFilter === tag) {
+                button.classList.add('active');
+            }
+            tagFilterList.appendChild(button);
+        });
+
+         // --- Update "All Unique Tags" Display List ---
+         allUniqueTagsList.innerHTML = ''; // Clear existing tags
+         uniqueTags.forEach(tag => {
+             const span = document.createElement('span');
+             span.className = 'tag-display';
+             span.textContent = tag;
+             allUniqueTagsList.appendChild(span);
+         });
+    }
+
+    function filterChannelsByTag(tag) {
+        if (!channelListContainer) return;
+        const cards = channelListContainer.querySelectorAll('.channel-card');
+        let visibleCount = 0;
+
+        cards.forEach(card => {
+            let tagsOnCard = [];
+            try {
+                 // Read tags from the data attribute, ensure it's parsed as array
+                 const tagsData = card.dataset.tags;
+                 tagsOnCard = tagsData ? JSON.parse(tagsData) : [];
+                 if (!Array.isArray(tagsOnCard)) tagsOnCard = []; // Fallback
+            } catch (e) {
+                 console.error("Error parsing tags data from card:", card.dataset.tags, e);
+                 tagsOnCard = [];
+            }
+
+
+            const matchesFilter = (tag === 'all' || tagsOnCard.includes(tag));
+
+            if (matchesFilter) {
+                card.classList.remove('hidden');
+                visibleCount++;
+            } else {
+                card.classList.add('hidden');
+            }
+        });
+
+        if (channelCountSpan) {
+             channelCountSpan.textContent = visibleCount;
+        }
+    }
+
+    function updateChannelList(channels) {
+         if (!channelListContainer) return;
+         channelListContainer.innerHTML = ''; // Clear existing channels
+
+        if (!channels || channels.length === 0) {
+             channelListContainer.innerHTML = '<p>No channels found.</p>';
+             if (channelCountSpan) channelCountSpan.textContent = '0';
+             return;
+        }
+
+         channels.forEach(channel => {
+             const card = document.createElement('div');
+             card.className = 'channel-card';
+             card.dataset.channelId = channel.channel_id;
+              // Ensure tags are stored as a valid JSON string in the data attribute
+             card.dataset.tags = JSON.stringify(channel.tags || []);
+
+             // Sanitize user-generated content if necessary, though here it's from YT API/DB
+             const thumbnail = channel.thumbnail_url ? `<img src="${channel.thumbnail_url}" alt="${channel.title} thumbnail" class="thumbnail">` : '<div class="thumbnail placeholder"></div>'; // Add placeholder style if needed
+             const tagsHtml = (channel.tags || []).map(tag => `<span class="tag-display">${escapeHtml(tag)}</span>`).join('');
+             const tagsValue = (channel.tags || []).join(', ');
+
+             card.innerHTML = `
+                ${thumbnail}
+                <div class="channel-info">
+                    <h3>${escapeHtml(channel.title)}</h3>
+                    <div class="current-tags" id="tags-${channel.channel_id}">${tagsHtml}</div>
+                    <div class="tag-input-section">
+                        <input type="text" id="input-${channel.channel_id}" placeholder="Add tags (comma-separated)" value="${escapeHtml(tagsValue)}">
+                        <button class="save-tags-button" data-channel-id="${channel.channel_id}">Save Tags</button>
+                        <span class="status-message" id="status-${channel.channel_id}"></span>
+                    </div>
+                </div>
+             `;
+             channelListContainer.appendChild(card);
+         });
+
+        if (channelCountSpan) {
+            channelCountSpan.textContent = channels.length;
+        }
+    }
+
+    // Simple HTML escaping function
+    function escapeHtml(unsafe) {
+        if (!unsafe) return '';
+        return unsafe
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+     }
+
+    // Initial filter application (show all)
+    filterChannelsByTag('all');
+});

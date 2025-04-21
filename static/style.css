@@ -1,0 +1,372 @@
+body {
+    font-family: sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+header {
+    background-color: #c4302b; /* YouTube Red */
+    color: #fff;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+#refresh-button {
+    padding: 0.5rem 1rem;
+    background-color: #fff;
+    color: #c4302b;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+}
+
+#refresh-button:hover {
+    background-color: #eee;
+}
+
+#refresh-status {
+    font-size: 0.9em;
+    min-height: 1.2em; /* Prevent layout shift */
+    color: #ffcc00; /* Make status more visible */
+}
+#refresh-status.success { color: #a2ff9b; }
+#refresh-status.error { color: #ff8a8a; }
+
+
+.container {
+    display: flex;
+    max-width: 1400px;
+    margin: 20px auto;
+    padding: 0 20px;
+    gap: 20px; /* Space between sidebar and main content */
+    /* Align items at the start for sticky positioning to work correctly */
+    align-items: flex-start;
+}
+
+.filters {
+    flex: 0 0 250px; /* Fixed width sidebar */
+    background-color: #fff;
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    height: fit-content; /* Important for sticky */
+
+    /* --- Sticky Sidebar --- */
+    position: sticky;
+    top: 20px; /* Space from the top viewport edge */
+    align-self: flex-start; /* Ensures it aligns correctly in the flex container */
+    /* --- Fin Sticky Sidebar --- */
+}
+
+.filters h2 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.1rem;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}
+#tag-filter-list {
+    margin-bottom: 20px;
+}
+
+.tag-filter {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    margin-bottom: 5px;
+    background-color: #f0f0f0; /* Default BG */
+    border: 1px solid #ddd; /* Default Border */
+    border-radius: 4px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    color: #000; /* Default text black */
+    overflow: hidden; /* Prevent text overflow */
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tag-filter:hover {
+    filter: brightness(95%); /* Darken slightly on hover */
+}
+
+.tag-filter.active {
+    /* Use a distinct style for active, maybe outline or brighter text */
+    /* Avoid changing BG color here as it's set dynamically */
+    box-shadow: inset 0 0 0 2px #c4302b; /* Red outline when active */
+    font-weight: bold;
+    color: #000; /* Keep text black unless BG is very dark */
+}
+/* Override active style for 'Show All' */
+.tag-filter[data-tag="all"].active {
+     background-color: #c4302b !important; /* Force red for 'Show All' active */
+     border-color: #c4302b !important;
+     color: white !important;
+     box-shadow: none; /* Remove inset shadow for this one */
+}
+
+
+#all-unique-tags-list .tag-display {
+    margin-right: 5px;
+    margin-bottom: 5px;
+}
+
+.channel-list {
+    flex: 1; /* Takes remaining space */
+    /* No background needed if cards cover it */
+    /* min-width: 0; Prevent flexbox overflow issues */
+}
+
+.channel-list h2 {
+     margin-top: 0;
+     margin-bottom: 15px;
+     font-size: 1.2rem;
+     border-bottom: 1px solid #eee;
+     padding-bottom: 8px;
+     background-color: #fff; /* Give header a background */
+     padding: 15px; /* Match card padding */
+     border-radius: 5px 5px 0 0; /* Round top corners */
+     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+#channels-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    padding-top: 0; /* Remove padding if header has it */
+}
+
+
+.channel-card {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 15px;
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    transition: box-shadow 0.2s ease;
+    /* display: flex is default */
+}
+
+.channel-card.hidden {
+    display: none;
+}
+
+
+.channel-card:hover {
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+}
+
+.thumbnail {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid #eee; /* Slight border for definition */
+}
+
+.channel-info {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.channel-info h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* Style for clickable title */
+.channel-info h3 a {
+    text-decoration: none;
+    color: inherit;
+    transition: color 0.2s ease;
+}
+.channel-info h3 a:hover {
+    text-decoration: underline;
+    color: #c4302b;
+}
+
+
+.current-tags {
+    margin-bottom: 10px;
+    min-height: 1.5em;
+}
+
+.tag-display {
+    display: inline-block;
+    /* background-color set dynamically */
+    color: #000; /* Default text black, adjust if needed */
+    padding: 4px 10px;
+    border-radius: 12px; /* Pill shape */
+    font-size: 0.8rem;
+    margin-right: 5px;
+    margin-bottom: 5px;
+    white-space: nowrap;
+    border: 1px solid rgba(0,0,0,0.1); /* Subtle border */
+}
+
+
+.tag-input-section {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.tag-input-section input[type="text"] {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    min-width: 150px;
+}
+
+.save-tags-button {
+    padding: 8px 12px;
+    background-color: #4CAF50; /* Green */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s ease;
+}
+
+.save-tags-button:hover {
+    background-color: #45a049;
+}
+
+.status-message {
+    font-size: 0.8em;
+    margin-left: 5px;
+    min-height: 1em;
+    display: inline-block;
+}
+.status-message.success { color: green; }
+.status-message.error { color: red; }
+
+
+/* --- Estilos para Tags con Colores y Paleta --- */
+
+.tag-list-interactive {
+     max-height: 250px; /* Limitar altura si hay muchos tags */
+     overflow-y: auto; /* Añadir scroll si se excede */
+     padding-right: 5px; /* Espacio para scrollbar */
+}
+
+/* Contenedor para el tag y su paleta oculta */
+.tag-entry {
+    position: relative;
+    margin-bottom: 5px;
+    display: block;
+}
+
+/* Hacer el tag en la lista 'All tags' clickable */
+#all-unique-tags-list .tag-display.tag-clickable {
+    cursor: pointer;
+    transition: box-shadow 0.2s ease;
+}
+ #all-unique-tags-list .tag-display.tag-clickable:hover {
+     box-shadow: 0 0 5px rgba(0,0,0,0.3);
+ }
+
+
+/* Paleta de colores oculta */
+.color-palette {
+    position: absolute;
+    left: 100%;
+    top: -5px; /* Alinear un poco mejor verticalmente */
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 5px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); /* 3 columnas */
+    gap: 4px;
+    z-index: 10;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+    margin-left: 8px;
+    width: max-content; /* Ajustar ancho al contenido */
+}
+
+.color-palette.hidden {
+    display: none;
+}
+
+/* Botones de opción de color */
+.color-option {
+    width: 25px;
+    height: 25px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.7em;
+    line-height: 23px;
+    text-align: center;
+    padding: 0;
+    box-sizing: border-box;
+    transition: transform 0.1s ease, border-color 0.1s ease;
+    color: rgba(0,0,0,0.7); /* Color for 'Reset' text */
+}
+
+.color-option:hover {
+    border-color: #333;
+    transform: scale(1.1);
+}
+
+/* --- Fin Estilos Tags con Colores --- */
+
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+    .filters {
+        flex: 0 0 auto;
+        width: 100%;
+        margin-bottom: 20px;
+        /* --- Desactivar Sticky en móvil --- */
+        position: static; /* O relative, si es necesario */
+        top: auto;
+        /* --- Fin Desactivar Sticky --- */
+    }
+    #channels-container {
+        grid-template-columns: 1fr; /* Una columna en móvil */
+    }
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    /* Ajustar posición de paleta en móvil si es necesario */
+    .color-palette {
+         left: 0; /* Posicionar debajo */
+         top: 100%;
+         margin-left: 0;
+         margin-top: 5px;
+         width: auto; /* Ajustar ancho */
+         max-width: 150px;
+    }
+
+}

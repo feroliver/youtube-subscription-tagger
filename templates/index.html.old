@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Subscription Tagger</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Your YouTube Subscriptions</h1>
+        <button id="refresh-button">Refresh from YouTube</button>
+        <p id="refresh-status"></p>
+    </header>
+
+    <div class="container">
+        <aside class="filters">
+            <h2>Filter by Tag</h2>
+            <div id="tag-filter-list">
+                <button class="tag-filter active" data-tag="all">Show All</button>
+                {% for tag in unique_tags %}
+                    <button class="tag-filter" data-tag="{{ tag }}">{{ tag }}</button>
+                {% endfor %}
+            </div>
+             <h2>All Unique Tags</h2>
+             <div id="all-unique-tags-list" class="tag-list">
+                {% for tag in unique_tags %}
+                    <span class="tag-display">{{ tag }}</span>
+                {% endfor %}
+             </div>
+        </aside>
+
+        <main class="channel-list" id="channel-list">
+            <h2>Channels (<span id="channel-count">{{ channels|length }}</span>)</h2>
+            <div id="channels-container">
+                {% if channels %}
+                    {% for channel in channels %}
+                    <div class="channel-card" data-channel-id="{{ channel.channel_id }}" data-tags='{{ channel.tags|tojson|safe }}'>
+                        <img src="{{ channel.thumbnail_url }}" alt="{{ channel.title }} thumbnail" class="thumbnail">
+                        <div class="channel-info">
+                            <h3>{{ channel.title }}</h3>
+                            <div class="current-tags" id="tags-{{ channel.channel_id }}">
+                                {% for tag in channel.tags %}
+                                    <span class="tag-display">{{ tag }}</span>
+                                {% endfor %}
+                            </div>
+                            <div class="tag-input-section">
+                                <input type="text"
+                                       id="input-{{ channel.channel_id }}"
+                                       placeholder="Add tags (comma-separated)"
+                                       value="{{ channel.tags|join(', ') }}">
+                                <button class="save-tags-button" data-channel-id="{{ channel.channel_id }}">Save Tags</button>
+                                <span class="status-message" id="status-{{ channel.channel_id }}"></span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p>No subscriptions found or loaded yet. Try refreshing.</p>
+                {% endif %}
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
