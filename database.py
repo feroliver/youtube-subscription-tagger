@@ -29,7 +29,8 @@ def init_db():
                     channel_id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
                     thumbnail_url TEXT,
-                    tags TEXT DEFAULT '[]'
+                    tags TEXT DEFAULT '[]',
+                    rating INTEGER DEFAULT NULL
                 )
             ''')
             cursor.execute(f'''
@@ -38,6 +39,12 @@ def init_db():
                     color TEXT DEFAULT '{DEFAULT_TAG_COLOR}'
                 )
             ''')
+            # Check and add rating column if it doesn't exist (for migrations)
+            try:
+                cursor.execute("SELECT rating FROM channels LIMIT 1")
+            except sqlite3.OperationalError:
+                logging.info("Adding 'rating' column to existing 'channels' table.")
+                cursor.execute("ALTER TABLE channels ADD COLUMN rating INTEGER DEFAULT NULL")
             conn.commit()
             logging.info("Database initialized successfully.")
         except sqlite3.Error as e:
@@ -54,15 +61,17 @@ def init_db():
         logging.error("Could not get DB connection for initialization.")
 
 def add_or_update_channel(channel_id, title, thumbnail_url):
-    """Adds a new channel or updates the title/thumbnail if it already exists."""
+    """Adds a new channel or updates the title/thumbnail if it already exists. Preserves existing tags and rating."""
     conn = get_db_connection()
     if conn:
         try:
             cursor = conn.cursor()
+            # Insert if not exists, keeping existing rating/tags if the row is ignored
             cursor.execute('''
-                INSERT OR IGNORE INTO channels (channel_id, title, thumbnail_url, tags)
-                VALUES (?, ?, ?, '[]')
+                INSERT OR IGNORE INTO channels (channel_id, title, thumbnail_url, tags, rating)
+                VALUES (?, ?, ?, '[]', NULL)
             ''', (channel_id, title, thumbnail_url))
+            # Update title and thumbnail, but NOT tags or rating here
             cursor.execute('''
                 UPDATE channels
                 SET title = ?, thumbnail_url = ?
@@ -100,7 +109,7 @@ def update_channel_tags(channel_id, tags_list):
     return success
 
 def get_all_channels():
-    """Retrieves all channels from the database."""
+    """Retrieves all channels from the database, ordered by rating (desc, NULLs last) then title."""
     conn = get_db_connection()
     channels = []
     if conn:
@@ -109,7 +118,12 @@ def get_all_channels():
             # Asegurarse que la tabla existe antes de consultar
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='channels';")
             if cursor.fetchone():
-                 cursor.execute('SELECT channel_id, title, thumbnail_url, tags FROM channels ORDER BY title COLLATE NOCASE ASC')
+                 # Include rating in SELECT and ORDER BY rating DESC NULLS LAST, then title
+                 cursor.execute('''
+                     SELECT channel_id, title, thumbnail_url, tags, rating
+                     FROM channels
+                     ORDER BY rating DESC NULLS LAST, title COLLATE NOCASE ASC
+                 ''')
                  rows = cursor.fetchall()
                  for row in rows:
                     channel_dict = dict(row)
@@ -117,6 +131,8 @@ def get_all_channels():
                         channel_dict['tags'] = json.loads(channel_dict.get('tags', '[]') or '[]')
                     except json.JSONDecodeError:
                          channel_dict['tags'] = []
+                    # Ensure rating is an integer or None
+                    channel_dict['rating'] = channel_dict.get('rating') if channel_dict.get('rating') is not None else None
                     channels.append(channel_dict)
             else:
                  logging.warning("Table 'channels' does not exist yet.")
@@ -220,7 +236,35 @@ def delete_channel(channel_id):
         finally:
             conn.close()
     return success
-# --- FIN NUEVAS FUNCIONES ---
+
+def update_channel_rating(channel_id, rating):
+    """Updates the rating for a specific channel."""
+    conn = get_db_connection()
+    success = False
+    if conn:
+        try:
+            # Validate rating (should be 1-5 or None)
+            validated_rating = int(rating) if rating is not None and 1 <= int(rating) <= 5 else None
+
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE channels
+                SET rating = ?
+                WHERE channel_id = ?
+            ''', (validated_rating, channel_id))
+            conn.commit()
+            if cursor.rowcount > 0:
+                logging.info(f"Updated rating for channel {channel_id} to {validated_rating}")
+                success = True
+            else:
+                 logging.warning(f"Attempted to update rating for channel {channel_id}, but it was not found.")
+                 # Consider success if not found? Depends on desired behavior. Let's say False for now.
+                 success = False
+        except (sqlite3.Error, ValueError) as e: # Catch DB errors and invalid integer conversion
+            logging.error(f"Error updating rating for channel {channel_id}: {e}")
+        finally:
+            conn.close()
+    return success
 
 # Initialize the database when this module is imported
 init_db()

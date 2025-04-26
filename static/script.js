@@ -282,130 +282,217 @@ document.addEventListener('DOMContentLoaded', () => {
                  if (saveButton) saveButton.click();
              }
         });
-    }
 
+        // --- NEW: Event delegation for rating stars ---
+        channelListContainer.addEventListener('click', async (event) => {
+            const star = event.target.closest('.star');
+            const clearButton = event.target.closest('.clear-rating');
+            const ratingContainer = event.target.closest('.rating-stars');
 
-    // Event listener for tag filtering
-    if (tagFilterList) {
-        tagFilterList.addEventListener('click', (event) => {
-            if (event.target.classList.contains('tag-filter')) {
-                const selectedTag = event.target.dataset.tag;
-                tagFilterList.querySelectorAll('.tag-filter').forEach(button => button.classList.remove('active'));
-                event.target.classList.add('active');
-                filterChannelsByTag(selectedTag);
+            if (!ratingContainer || (!star && !clearButton)) {
+                 return; // Click wasn't on a star or the clear button inside a rating container
             }
-        });
-    }
 
-    // Event listener for refresh button
-    if (refreshButton) {
-        refreshButton.addEventListener('click', async () => {
-            refreshStatus.textContent = 'Refreshing... please wait.';
-            refreshStatus.className = '';
-            refreshButton.disabled = true;
+            const channelId = ratingContainer.dataset.channelId;
+            let newRating = null;
+
+            if (star) {
+                 newRating = parseInt(star.dataset.value, 10);
+            } else if (clearButton) {
+                 newRating = null; // Signal to clear the rating
+            }
+
+            // Prevent sending update if rating didn't change (e.g., clicking current rating)
+            // This check might be optional depending on desired UX
+            // const currentRating = Array.from(ratingContainer.querySelectorAll('.star.filled')).length;
+            // if (newRating === currentRating) return;
+
+            // Visually provide immediate feedback (optional, could wait for server response)
+            // updateStarsVisual(ratingContainer, newRating);
 
             try {
-                const response = await fetch('/refresh_from_youtube', { method: 'POST' });
+                const response = await fetch(`/api/rating/${channelId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rating: newRating }), // Send null to clear
+                });
                 const result = await response.json();
 
                 if (response.ok && result.success) {
-                    refreshStatus.textContent = result.message || 'Refresh successful!';
-                    refreshStatus.classList.add('success');
-                    // Actualizar datos globales y redibujar todo
-                    window.tagColors = result.tag_colors;
-                    updateChannelList(result.channels);
-                    updateTagFilters(result.unique_tags);
-                    // Reset filter visually and logically
-                    tagFilterList.querySelectorAll('.tag-filter').forEach(button => button.classList.remove('active'));
-                    tagFilterList.querySelector('.tag-filter[data-tag="all"]')?.classList.add('active');
-                    filterChannelsByTag('all');
-                } else {
-                     throw new Error(result.message || 'Failed to refresh from YouTube.');
-                }
+                    console.log(`Rating updated for ${channelId} to ${result.rating}`);
+                    // Update stars definitively based on server response
+                    updateStarsVisual(ratingContainer, result.rating);
 
+                    // OPTIONAL: Re-render the entire channel list to reflect the new order
+                    // This is simpler than trying to reorder elements in the DOM
+                    // updateChannelList(result.channels);
+                    // updateTagFilters(result.unique_tags); // Might need tags if re-rendering
+                    // Be aware this might lose scroll position etc.
+
+                    // Simpler: Just update the visual stars, order updates on next full page load/refresh
+
+                } else {
+                    throw new Error(result.message || 'Failed to update rating.');
+                    // Revert visual change if immediate feedback was given
+                    // updateStarsVisual(ratingContainer, currentRating); // Revert to original
+                }
             } catch (error) {
-                console.error('Error refreshing subscriptions:', error);
-                refreshStatus.textContent = `Error: ${error.message}`;
-                refreshStatus.classList.add('error');
-            } finally {
-                refreshButton.disabled = false;
-                setTimeout(() => {
-                    refreshStatus.textContent = '';
-                    refreshStatus.className = '';
-                }, 5000);
+                console.error('Error updating rating:', error);
+                alert(`Error updating rating: ${error.message}`);
+                // Revert visual change if immediate feedback was given
+                // updateStarsVisual(ratingContainer, currentRating); // Revert to original
             }
         });
-    }
+        // --- END NEW: Event delegation for rating stars ---
 
-    // Event listeners for Interactive Tag List (Color Palette)
-    if (interactiveTagList) {
-        // Listener para MOSTRAR/OCULTAR paleta
-        interactiveTagList.addEventListener('click', (event) => {
-            if (event.target.classList.contains('tag-clickable')) {
-                const palette = event.target.nextElementSibling;
-                if (palette && palette.classList.contains('color-palette')) {
-                    interactiveTagList.querySelectorAll('.color-palette:not(.hidden)')
-                        .forEach(p => { if (p !== palette) p.classList.add('hidden'); });
-                    palette.classList.toggle('hidden');
+        // Event listener for tag filtering
+        if (tagFilterList) {
+            tagFilterList.addEventListener('click', (event) => {
+                if (event.target.classList.contains('tag-filter')) {
+                    const selectedTag = event.target.dataset.tag;
+                    tagFilterList.querySelectorAll('.tag-filter').forEach(button => button.classList.remove('active'));
+                    event.target.classList.add('active');
+                    filterChannelsByTag(selectedTag);
                 }
-                 // Ocultar la paleta si se hace clic fuera de ella o del tag
-                 document.addEventListener('click', hidePaletteOnClickOutside, { once: true, capture: true });
-            }
-        }, true); // Use capture phase maybe? Or handle outside click better. Let's try basic first.
+            });
+        }
 
-        // Listener para SELECCIONAR color
-        interactiveTagList.addEventListener('click', async (event) => {
-            if (event.target.classList.contains('color-option')) {
-                event.stopPropagation(); // Prevent click from bubbling up to the toggle listener immediately
-                const button = event.target;
-                const newColor = button.dataset.color;
-                const tagEntry = button.closest('.tag-entry');
-                const tagSpan = tagEntry?.querySelector('.tag-display');
-                const tag = tagSpan?.dataset.tag;
-                const palette = button.closest('.color-palette');
-
-                if (!tag || !newColor || !palette) return;
-
-                palette.classList.add('hidden'); // Ocultar paleta
-
-                if (getTagColor(tag) === newColor) return; // No hacer nada si el color es el mismo
+        // Event listener for refresh button
+        if (refreshButton) {
+            refreshButton.addEventListener('click', async () => {
+                refreshStatus.textContent = 'Refreshing... please wait.';
+                refreshStatus.className = '';
+                refreshButton.disabled = true;
 
                 try {
-                    const response = await fetch(`/api/tags/color/${encodeURIComponent(tag)}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ color: newColor }),
-                    });
+                    const response = await fetch('/refresh_from_youtube', { method: 'POST' });
                     const result = await response.json();
 
                     if (response.ok && result.success) {
-                        window.tagColors = result.all_colors; // Actualizar mapa global
-                        updateTagColorOnPage(tag, newColor); // Actualizar UI
+                        refreshStatus.textContent = result.message || 'Refresh successful!';
+                        refreshStatus.classList.add('success');
+                        // Actualizar datos globales y redibujar todo
+                        window.tagColors = result.tag_colors;
+                        updateChannelList(result.channels);
+                        updateTagFilters(result.unique_tags);
+                        // Reset filter visually and logically
+                        tagFilterList.querySelectorAll('.tag-filter').forEach(button => button.classList.remove('active'));
+                        tagFilterList.querySelector('.tag-filter[data-tag="all"]')?.classList.add('active');
+                        filterChannelsByTag('all');
                     } else {
-                        throw new Error(result.message || 'Failed to update color');
+                         throw new Error(result.message || 'Failed to refresh from YouTube.');
                     }
+
                 } catch (error) {
-                    console.error(`Error updating color for tag ${tag}:`, error);
-                    alert(`Error updating color: ${error.message}`); // Informar al usuario
+                    console.error('Error refreshing subscriptions:', error);
+                    refreshStatus.textContent = `Error: ${error.message}`;
+                    refreshStatus.classList.add('error');
+                } finally {
+                    refreshButton.disabled = false;
+                    setTimeout(() => {
+                        refreshStatus.textContent = '';
+                        refreshStatus.className = '';
+                    }, 5000);
                 }
-            }
-        });
-    }
+            });
+        }
 
-     // Helper to hide palettes when clicking outside
-     function hidePaletteOnClickOutside(event) {
-        if (!interactiveTagList) return;
-         const openPalette = interactiveTagList.querySelector('.color-palette:not(.hidden)');
-         if (openPalette && !openPalette.contains(event.target) && !openPalette.previousElementSibling.contains(event.target)) {
-             openPalette.classList.add('hidden');
-         } else if (openPalette) {
-             // Re-attach listener if click was inside but didn't close it (e.g. on palette bg)
-             document.addEventListener('click', hidePaletteOnClickOutside, { once: true, capture: true });
+        // Event listeners for Interactive Tag List (Color Palette)
+        if (interactiveTagList) {
+            // Listener para MOSTRAR/OCULTAR paleta
+            interactiveTagList.addEventListener('click', (event) => {
+                if (event.target.classList.contains('tag-clickable')) {
+                    const palette = event.target.nextElementSibling;
+                    if (palette && palette.classList.contains('color-palette')) {
+                        interactiveTagList.querySelectorAll('.color-palette:not(.hidden)')
+                            .forEach(p => { if (p !== palette) p.classList.add('hidden'); });
+                        palette.classList.toggle('hidden');
+                    }
+                     // Ocultar la paleta si se hace clic fuera de ella o del tag
+                     document.addEventListener('click', hidePaletteOnClickOutside, { once: true, capture: true });
+                }
+            }, true); // Use capture phase maybe? Or handle outside click better. Let's try basic first.
+
+            // Listener para SELECCIONAR color
+            interactiveTagList.addEventListener('click', async (event) => {
+                if (event.target.classList.contains('color-option')) {
+                    event.stopPropagation(); // Prevent click from bubbling up to the toggle listener immediately
+                    const button = event.target;
+                    const newColor = button.dataset.color;
+                    const tagEntry = button.closest('.tag-entry');
+                    const tagSpan = tagEntry?.querySelector('.tag-display');
+                    const tag = tagSpan?.dataset.tag;
+                    const palette = button.closest('.color-palette');
+
+                    if (!tag || !newColor || !palette) return;
+
+                    palette.classList.add('hidden'); // Ocultar paleta
+
+                    if (getTagColor(tag) === newColor) return; // No hacer nada si el color es el mismo
+
+                    try {
+                        const response = await fetch(`/api/tags/color/${encodeURIComponent(tag)}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ color: newColor }),
+                        });
+                        const result = await response.json();
+
+                        if (response.ok && result.success) {
+                            window.tagColors = result.all_colors; // Actualizar mapa global
+                            updateTagColorOnPage(tag, newColor); // Actualizar UI
+                        } else {
+                            throw new Error(result.message || 'Failed to update color');
+                        }
+                    } catch (error) {
+                        console.error(`Error updating color for tag ${tag}:`, error);
+                        alert(`Error updating color: ${error.message}`); // Informar al usuario
+                    }
+                }
+            });
+        }
+
+         // Helper to hide palettes when clicking outside
+         function hidePaletteOnClickOutside(event) {
+            if (!interactiveTagList) return;
+             const openPalette = interactiveTagList.querySelector('.color-palette:not(.hidden)');
+             if (openPalette && !openPalette.contains(event.target) && !openPalette.previousElementSibling.contains(event.target)) {
+                 openPalette.classList.add('hidden');
+             } else if (openPalette) {
+                 // Re-attach listener if click was inside but didn't close it (e.g. on palette bg)
+                 document.addEventListener('click', hidePaletteOnClickOutside, { once: true, capture: true });
+             }
          }
-     }
-
+    }
 
     // Initial filter application (show all)
     filterChannelsByTag('all');
 
 }); // End of DOMContentLoaded
+
+// --- NEW Helper function to update star visuals ---
+function updateStarsVisual(ratingContainer, ratingValue) {
+     if (!ratingContainer) return;
+     const stars = ratingContainer.querySelectorAll('.star');
+     const numericRating = ratingValue === null ? 0 : parseInt(ratingValue, 10);
+     stars.forEach((star, index) => {
+         if (index < numericRating) {
+             star.classList.add('filled');
+         } else {
+             star.classList.remove('filled');
+         }
+     });
+
+     // Add or remove the clear button based on the rating
+     let clearButton = ratingContainer.querySelector('.clear-rating');
+     if (numericRating > 0 && !clearButton) {
+         clearButton = document.createElement('span');
+         clearButton.className = 'clear-rating';
+         clearButton.title = 'Clear rating';
+         clearButton.innerHTML = '&#10006;'; // Simple X
+         ratingContainer.appendChild(clearButton);
+     } else if (numericRating === 0 && clearButton) {
+         clearButton.remove();
+     }
+}
+// --- END NEW Helper function ---

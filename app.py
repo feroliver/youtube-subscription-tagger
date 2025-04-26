@@ -185,6 +185,40 @@ def update_tag_color(tag_name):
     else:
         return jsonify({"success": False, "message": "Failed to update tag color in database."}), 500
 
+
+@app.route('/api/rating/<channel_id>', methods=['POST'])
+def update_rating(channel_id):
+    """API endpoint to update the rating for a given channel."""
+    data = request.get_json()
+    if not data or 'rating' not in data:
+        return jsonify({"success": False, "message": "Missing 'rating' in request data."}), 400
+
+    try:
+        # Allow None or integer rating
+        rating_value = data['rating']
+        if rating_value is not None:
+            rating_value = int(rating_value)
+            if not 1 <= rating_value <= 5:
+                raise ValueError("Rating must be between 1 and 5.")
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "message": "Invalid rating value. Must be an integer between 1 and 5, or null."}), 400
+
+    success = db.update_channel_rating(channel_id, rating_value)
+
+    if success:
+        # Re-fetch the channels to get the updated order
+        updated_channels = db.get_all_channels()
+        return jsonify({
+            "success": True,
+            "channel_id": channel_id,
+            "rating": rating_value,
+            # Optionally return all channels if frontend needs to redraw the whole list
+            "channels": updated_channels
+        })
+    else:
+        return jsonify({"success": False, "message": "Failed to update rating in database."}), 500
+
+
 if __name__ == '__main__':
     db.init_db()
     app.run(debug=True, port=5000)

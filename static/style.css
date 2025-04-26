@@ -367,3 +367,43 @@ header h1 {
          /* Podría necesitar más ajustes si interfiere */
     }
 }
+
+/* --- Estilos para Rating Stars --- */
+.rating-stars {
+    /* display: inline-block; */ /* Ya no es necesario */
+    /* margin-left: 15px; */   /* Ya no es necesario */
+    /* vertical-align: middle; */ /* Ya no es necesario */
+    margin-top: 5px; /* Añadir espacio sobre las estrellas */
+    margin-bottom: 10px; /* Añadir espacio debajo de las estrellas */
+    font-size: 1.2em;
+    line-height: 1;
+}
+
+.star {
+    color: #ccc; /* Color de estrella vacía */
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.star.filled {
+    color: #f8d64e; /* Color de estrella llena (dorado/amarillo) */
+}
+
+.star:hover {
+    color: #e0c145; /* Ligero cambio de color al pasar el mouse */
+}
+
+.clear-rating {
+    color: #aaa;
+    cursor: pointer;
+    margin-left: 8px;
+    font-size: 0.8em; /* Hacer la X un poco más pequeña */
+    vertical-align: middle;
+    transition: color 0.2s ease;
+    display: inline-block; /* Asegurar que se muestra */
+    line-height: 1;
+}
+
+.clear-rating:hover {
+    color: #e53935; /* Rojo al pasar el mouse */
+}
