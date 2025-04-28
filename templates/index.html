@@ -53,6 +53,9 @@
 
         <main class="channel-list" id="channel-list">
             <h2>Channels (<span id="channel-count">{{ channels|length }}</span>)</h2>
+            <div class="search-container">
+                <input type="text" id="channel-search" placeholder="Search channels..." class="channel-search">
+            </div>
             <div id="channels-container">
                 {% if channels %}
                     {% for channel in channels %}

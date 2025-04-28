@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshButton = document.getElementById('refresh-button');
     const refreshStatus = document.getElementById('refresh-status');
     const interactiveTagList = document.getElementById('all-unique-tags-list'); // Referencia a la lista de tags interactiva
+    const searchInput = document.getElementById('channel-search');
 
     // --- Helper Functions ---
 
@@ -137,35 +138,48 @@ document.addEventListener('DOMContentLoaded', () => {
          });
     }
 
-    // Filtra los canales visibles basado en el tag seleccionado
-    function filterChannelsByTag(tag) {
+    // Filtra los canales visibles basado en los tags seleccionados
+    function filterChannelsByTag() {
         if (!channelListContainer) return;
         const cards = channelListContainer.querySelectorAll('.channel-card');
         let visibleCount = 0;
 
-        cards.forEach(card => {
-            let tagsOnCard = [];
-            try {
-                 const tagsData = card.dataset.tags;
-                 tagsOnCard = tagsData ? JSON.parse(tagsData) : [];
-                 if (!Array.isArray(tagsOnCard)) tagsOnCard = [];
-            } catch (e) {
-                 console.error("Error parsing tags data from card:", card.dataset.tags, e);
-                 tagsOnCard = [];
-            }
+        // Obtener todos los tags seleccionados
+        const selectedTags = Array.from(tagFilterList.querySelectorAll('.tag-filter.selected'))
+            .map(button => button.dataset.tag);
 
-            const matchesFilter = (tag === 'all' || tagsOnCard.includes(tag));
-
-            if (matchesFilter) {
+        // Si no hay tags seleccionados o solo está seleccionado "all", mostrar todos
+        if (selectedTags.length === 0 || (selectedTags.length === 1 && selectedTags[0] === 'all')) {
+            cards.forEach(card => {
                 card.classList.remove('hidden');
                 visibleCount++;
-            } else {
-                card.classList.add('hidden');
-            }
-        });
+            });
+        } else {
+            cards.forEach(card => {
+                let tagsOnCard = [];
+                try {
+                    const tagsData = card.dataset.tags;
+                    tagsOnCard = tagsData ? JSON.parse(tagsData) : [];
+                    if (!Array.isArray(tagsOnCard)) tagsOnCard = [];
+                } catch (e) {
+                    console.error("Error parsing tags data from card:", card.dataset.tags, e);
+                    tagsOnCard = [];
+                }
+
+                // Verificar si el canal tiene TODOS los tags seleccionados
+                const hasAllSelectedTags = selectedTags.every(tag => tagsOnCard.includes(tag));
+
+                if (hasAllSelectedTags) {
+                    card.classList.remove('hidden');
+                    visibleCount++;
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+        }
 
         if (channelCountSpan) {
-             channelCountSpan.textContent = visibleCount;
+            channelCountSpan.textContent = visibleCount;
         }
     }
 
@@ -253,7 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         statusElement.classList.add('success');
                         // Re-apply current filter in case tags changed relevantly
                         const currentFilterButton = tagFilterList.querySelector('.tag-filter.active');
-                        filterChannelsByTag(currentFilterButton ? currentFilterButton.dataset.tag : 'all');
+                        filterChannelsByTag();
                     } else {
                         throw new Error(result.message || 'Failed to save tags.');
                     }
@@ -349,10 +363,38 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tagFilterList) {
             tagFilterList.addEventListener('click', (event) => {
                 if (event.target.classList.contains('tag-filter')) {
-                    const selectedTag = event.target.dataset.tag;
-                    tagFilterList.querySelectorAll('.tag-filter').forEach(button => button.classList.remove('active'));
-                    event.target.classList.add('active');
-                    filterChannelsByTag(selectedTag);
+                    const clickedTag = event.target.dataset.tag;
+                    
+                    // Si se hace clic en "all", deseleccionar todo lo demás
+                    if (clickedTag === 'all') {
+                        tagFilterList.querySelectorAll('.tag-filter').forEach(button => {
+                            button.classList.remove('selected', 'multi-selected');
+                        });
+                        event.target.classList.add('selected');
+                    } else {
+                        // Si se hace clic en otro tag, deseleccionar "all"
+                        const allButton = tagFilterList.querySelector('.tag-filter[data-tag="all"]');
+                        if (allButton) {
+                            allButton.classList.remove('selected');
+                        }
+                        
+                        // Alternar la selección del tag clickeado
+                        event.target.classList.toggle('selected');
+                        
+                        // Actualizar el estado de multi-selected
+                        const selectedCount = tagFilterList.querySelectorAll('.tag-filter.selected').length;
+                        if (selectedCount > 1) {
+                            tagFilterList.querySelectorAll('.tag-filter.selected').forEach(button => {
+                                button.classList.add('multi-selected');
+                            });
+                        } else {
+                            tagFilterList.querySelectorAll('.tag-filter').forEach(button => {
+                                button.classList.remove('multi-selected');
+                            });
+                        }
+                    }
+                    
+                    filterChannelsByTag();
                 }
             });
         }
@@ -378,7 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Reset filter visually and logically
                         tagFilterList.querySelectorAll('.tag-filter').forEach(button => button.classList.remove('active'));
                         tagFilterList.querySelector('.tag-filter[data-tag="all"]')?.classList.add('active');
-                        filterChannelsByTag('all');
+                        filterChannelsByTag();
                     } else {
                          throw new Error(result.message || 'Failed to refresh from YouTube.');
                     }
@@ -466,7 +508,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Initial filter application (show all)
-    filterChannelsByTag('all');
+    filterChannelsByTag();
+
+    // Add this after the existing event listeners
+    searchInput.addEventListener('input', function() {
+        const searchText = this.value.toLowerCase();
+        const channels = document.querySelectorAll('.channel-card');
+        let visibleCount = 0;
+        
+        channels.forEach(channel => {
+            const title = channel.querySelector('.channel-info h3 a').textContent.toLowerCase();
+            const description = channel.querySelector('.channel-info .current-tags').textContent.toLowerCase();
+            
+            if (title.includes(searchText) || description.includes(searchText)) {
+                channel.style.display = '';
+                visibleCount++;
+            } else {
+                channel.style.display = 'none';
+            }
+        });
+        
+        channelCountSpan.textContent = visibleCount;
+    });
 
 }); // End of DOMContentLoaded
 
