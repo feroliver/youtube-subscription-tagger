@@ -73,8 +73,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!tagFilterList || !allUniqueTagsList) return;
 
         // --- Update Filter Buttons ---
-        const currentActiveButton = tagFilterList.querySelector('.tag-filter.active');
-        const currentFilter = currentActiveButton ? currentActiveButton.dataset.tag : 'all';
+        const currentActiveButtons = Array.from(tagFilterList.querySelectorAll('.tag-filter.selected'))
+            .map(button => button.dataset.tag);
 
         tagFilterList.innerHTML = ''; // Clear existing filter buttons
 
@@ -83,12 +83,24 @@ document.addEventListener('DOMContentLoaded', () => {
         allButton.className = 'tag-filter';
         allButton.dataset.tag = 'all';
         allButton.textContent = 'Show All';
-        allButton.style.backgroundColor = '#e0e0e0'; // Default color for 'all'
+        allButton.style.backgroundColor = '#e0e0e0';
         allButton.style.borderColor = '#e0e0e0';
-        if (currentFilter === 'all') {
-            allButton.classList.add('active');
+        if (currentActiveButtons.includes('all')) {
+            allButton.classList.add('selected');
         }
         tagFilterList.appendChild(allButton);
+
+        // Add "No Tags" button
+        const noTagButton = document.createElement('button');
+        noTagButton.className = 'tag-filter';
+        noTagButton.dataset.tag = 'no-tag';
+        noTagButton.textContent = 'No Tags';
+        noTagButton.style.backgroundColor = '#ff6b6b';
+        noTagButton.style.borderColor = '#ff6b6b';
+        if (currentActiveButtons.includes('no-tag')) {
+            noTagButton.classList.add('selected');
+        }
+        tagFilterList.appendChild(noTagButton);
 
         // Add buttons for each unique tag
         uniqueTags.forEach(tag => {
@@ -98,16 +110,23 @@ document.addEventListener('DOMContentLoaded', () => {
             button.dataset.tag = tag;
             button.textContent = tag;
             button.style.backgroundColor = color;
-            button.style.borderColor = color; // Match border
-            if (currentFilter === tag) {
-                button.classList.add('active');
+            button.style.borderColor = color;
+            if (currentActiveButtons.includes(tag)) {
+                button.classList.add('selected');
             }
             tagFilterList.appendChild(button);
         });
 
-         // --- Update "All Unique Tags" Interactive Display List ---
-         allUniqueTagsList.innerHTML = ''; // Clear existing tags
-         uniqueTags.forEach(tag => {
+        // Restore multi-selected state if needed
+        if (currentActiveButtons.length > 1) {
+            tagFilterList.querySelectorAll('.tag-filter.selected').forEach(button => {
+                button.classList.add('multi-selected');
+            });
+        }
+
+        // --- Update "All Unique Tags" Interactive Display List ---
+        allUniqueTagsList.innerHTML = ''; // Clear existing tags
+        uniqueTags.forEach(tag => {
             const color = getTagColor(tag);
             const tagEntryDiv = document.createElement('div');
             tagEntryDiv.className = 'tag-entry';
@@ -135,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tagEntryDiv.appendChild(tagSpan);
             tagEntryDiv.appendChild(paletteDiv);
             allUniqueTagsList.appendChild(tagEntryDiv);
-         });
+        });
     }
 
     // Filtra los canales visibles basado en los tags seleccionados
@@ -167,7 +186,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // Verificar si el canal tiene TODOS los tags seleccionados
-                const hasAllSelectedTags = selectedTags.every(tag => tagsOnCard.includes(tag));
+                const hasAllSelectedTags = selectedTags.every(tag => {
+                    if (tag === 'no-tag') {
+                        return tagsOnCard.length === 0;
+                    }
+                    return tagsOnCard.includes(tag);
+                });
 
                 if (hasAllSelectedTags) {
                     card.classList.remove('hidden');
@@ -258,16 +282,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     const result = await response.json();
 
                     if (response.ok && result.success) {
-                        window.tagColors = result.tag_colors; // Actualizar mapa global de colores
-                        updateChannelTagsDisplay(channelId, result.tags); // Redibuja tags del canal con color
+                        window.tagColors = result.tag_colors;
+                        updateChannelTagsDisplay(channelId, result.tags);
                         const card = button.closest('.channel-card');
                         if(card) card.dataset.tags = JSON.stringify(result.tags);
-                        updateTagFilters(result.unique_tags); // Redibuja filtros y lista interactiva con colores
+                        
+                        // Preserve current filter state
+                        const currentActiveButtons = Array.from(tagFilterList.querySelectorAll('.tag-filter.selected'))
+                            .map(button => button.dataset.tag);
+                        
+                        updateTagFilters(result.unique_tags);
+                        
+                        // Re-apply current filter
+                        filterChannelsByTag();
+                        
                         statusElement.textContent = 'Saved!';
                         statusElement.classList.add('success');
-                        // Re-apply current filter in case tags changed relevantly
-                        const currentFilterButton = tagFilterList.querySelector('.tag-filter.active');
-                        filterChannelsByTag();
                     } else {
                         throw new Error(result.message || 'Failed to save tags.');
                     }
@@ -278,10 +308,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 } finally {
                     button.disabled = false;
                     setTimeout(() => {
-                         if (statusElement.textContent === 'Saved!' || statusElement.textContent.startsWith('Error:')) {
-                              statusElement.textContent = '';
-                              statusElement.className = 'status-message';
-                         }
+                        if (statusElement.textContent === 'Saved!' || statusElement.textContent.startsWith('Error:')) {
+                            statusElement.textContent = '';
+                            statusElement.className = 'status-message';
+                        }
                     }, 3000);
                 }
             }

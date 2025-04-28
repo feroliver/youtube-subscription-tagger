@@ -18,6 +18,7 @@
             <h2>Filter by Tag</h2>
             <div id="tag-filter-list">
                 <button class="tag-filter active" data-tag="all" style="background-color: #e0e0e0; border-color: #e0e0e0;">Show All</button>
+                <button class="tag-filter" data-tag="no-tag" style="background-color: #ff6b6b; border-color: #ff6b6b;">No Tags</button>
                 {% for tag in unique_tags %}
                     {% set color = tag_colors.get(tag, DEFAULT_TAG_COLOR) %}
                     <button class="tag-filter" data-tag="{{ tag }}" style="background-color: {{ color }}; border-color: {{ color }};">
