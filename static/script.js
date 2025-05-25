@@ -8,6 +8,97 @@ document.addEventListener('DOMContentLoaded', () => {
     const interactiveTagList = document.getElementById('all-unique-tags-list'); // Referencia a la lista de tags interactiva
     const searchInput = document.getElementById('channel-search');
 
+    // Obtener la lista de tags únicos del DOM
+    const uniqueTags = Array.from(allUniqueTagsList.querySelectorAll('.tag-display'))
+        .map(span => span.textContent.trim());
+
+    // Función para manejar el autocompletado
+    function setupTagAutocomplete(inputElement) {
+        let currentSuggestion = '';
+        let suggestionSpan = null;
+
+        function createSuggestionSpan() {
+            if (!suggestionSpan) {
+                suggestionSpan = document.createElement('span');
+                suggestionSpan.style.position = 'absolute';
+                suggestionSpan.style.color = '#999';
+                suggestionSpan.style.pointerEvents = 'none';
+                inputElement.parentNode.style.position = 'relative';
+                inputElement.parentNode.appendChild(suggestionSpan);
+            }
+        }
+
+        function updateSuggestion() {
+            const inputValue = inputElement.value;
+            const lastTag = inputValue.split(',').pop().trim();
+            
+            if (lastTag) {
+                const matchingTag = uniqueTags.find(tag => 
+                    tag.toLowerCase().startsWith(lastTag.toLowerCase()) && 
+                    tag.toLowerCase() !== lastTag.toLowerCase()
+                );
+
+                if (matchingTag) {
+                    createSuggestionSpan();
+                    currentSuggestion = matchingTag;
+                    suggestionSpan.textContent = inputValue.slice(0, -lastTag.length) + matchingTag;
+                    suggestionSpan.style.left = inputElement.offsetLeft + 'px';
+                    suggestionSpan.style.top = inputElement.offsetTop + 'px';
+                    suggestionSpan.style.padding = window.getComputedStyle(inputElement).padding;
+                    suggestionSpan.style.font = window.getComputedStyle(inputElement).font;
+                    suggestionSpan.style.display = 'block';
+                } else {
+                    if (suggestionSpan) {
+                        suggestionSpan.style.display = 'none';
+                    }
+                    currentSuggestion = '';
+                }
+            } else {
+                if (suggestionSpan) {
+                    suggestionSpan.style.display = 'none';
+                }
+                currentSuggestion = '';
+            }
+        }
+
+        function acceptSuggestion() {
+            if (currentSuggestion) {
+                const inputValue = inputElement.value;
+                const lastTag = inputValue.split(',').pop().trim();
+                inputElement.value = inputValue.slice(0, -lastTag.length) + currentSuggestion;
+                if (suggestionSpan) {
+                    suggestionSpan.style.display = 'none';
+                }
+                currentSuggestion = '';
+            }
+        }
+
+        inputElement.addEventListener('input', updateSuggestion);
+        inputElement.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab' && currentSuggestion) {
+                e.preventDefault();
+                acceptSuggestion();
+            }
+        });
+    }
+
+    // Aplicar autocompletado a todos los inputs de tags existentes
+    document.querySelectorAll('.tag-input-section input[type="text"]').forEach(setupTagAutocomplete);
+
+    // Aplicar autocompletado a nuevos inputs cuando se creen
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                if (node.nodeType === 1) { // Element node
+                    const newInputs = node.querySelectorAll('.tag-input-section input[type="text"]');
+                    newInputs.forEach(setupTagAutocomplete);
+                }
+            });
+        });
+    });
+
+    observer.observe(channelListContainer, { childList: true, subtree: true });
+
     // --- Helper Functions ---
 
     // Función para obtener el color de un tag (usa el mapa global y el default)
@@ -124,9 +215,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // --- Update "All Unique Tags" Interactive Display List ---
-        allUniqueTagsList.innerHTML = ''; // Clear existing tags
-        uniqueTags.forEach(tag => {
+         // --- Update "All Unique Tags" Interactive Display List ---
+         allUniqueTagsList.innerHTML = ''; // Clear existing tags
+         uniqueTags.forEach(tag => {
             const color = getTagColor(tag);
             const tagEntryDiv = document.createElement('div');
             tagEntryDiv.className = 'tag-entry';
@@ -154,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tagEntryDiv.appendChild(tagSpan);
             tagEntryDiv.appendChild(paletteDiv);
             allUniqueTagsList.appendChild(tagEntryDiv);
-        });
+         });
     }
 
     // Filtra los canales visibles basado en los tags seleccionados
@@ -174,16 +265,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 visibleCount++;
             });
         } else {
-            cards.forEach(card => {
-                let tagsOnCard = [];
-                try {
-                    const tagsData = card.dataset.tags;
-                    tagsOnCard = tagsData ? JSON.parse(tagsData) : [];
-                    if (!Array.isArray(tagsOnCard)) tagsOnCard = [];
-                } catch (e) {
-                    console.error("Error parsing tags data from card:", card.dataset.tags, e);
-                    tagsOnCard = [];
-                }
+        cards.forEach(card => {
+            let tagsOnCard = [];
+            try {
+                 const tagsData = card.dataset.tags;
+                 tagsOnCard = tagsData ? JSON.parse(tagsData) : [];
+                 if (!Array.isArray(tagsOnCard)) tagsOnCard = [];
+            } catch (e) {
+                 console.error("Error parsing tags data from card:", card.dataset.tags, e);
+                 tagsOnCard = [];
+            }
 
                 // Verificar si el canal tiene TODOS los tags seleccionados
                 const hasAllSelectedTags = selectedTags.every(tag => {
@@ -194,16 +285,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 if (hasAllSelectedTags) {
-                    card.classList.remove('hidden');
-                    visibleCount++;
-                } else {
-                    card.classList.add('hidden');
-                }
-            });
+                card.classList.remove('hidden');
+                visibleCount++;
+            } else {
+                card.classList.add('hidden');
+            }
+        });
         }
 
         if (channelCountSpan) {
-            channelCountSpan.textContent = visibleCount;
+             channelCountSpan.textContent = visibleCount;
         }
     }
 
@@ -308,10 +399,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 } finally {
                     button.disabled = false;
                     setTimeout(() => {
-                        if (statusElement.textContent === 'Saved!' || statusElement.textContent.startsWith('Error:')) {
-                            statusElement.textContent = '';
-                            statusElement.className = 'status-message';
-                        }
+                         if (statusElement.textContent === 'Saved!' || statusElement.textContent.startsWith('Error:')) {
+                              statusElement.textContent = '';
+                              statusElement.className = 'status-message';
+                         }
                     }, 3000);
                 }
             }
@@ -389,10 +480,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         // --- END NEW: Event delegation for rating stars ---
 
-        // Event listener for tag filtering
-        if (tagFilterList) {
-            tagFilterList.addEventListener('click', (event) => {
-                if (event.target.classList.contains('tag-filter')) {
+    // Event listener for tag filtering
+    if (tagFilterList) {
+        tagFilterList.addEventListener('click', (event) => {
+            if (event.target.classList.contains('tag-filter')) {
                     const clickedTag = event.target.dataset.tag;
                     
                     // Si se hace clic en "all", deseleccionar todo lo demás
@@ -425,116 +516,116 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     
                     filterChannelsByTag();
-                }
-            });
-        }
+            }
+        });
+    }
 
-        // Event listener for refresh button
-        if (refreshButton) {
-            refreshButton.addEventListener('click', async () => {
-                refreshStatus.textContent = 'Refreshing... please wait.';
-                refreshStatus.className = '';
-                refreshButton.disabled = true;
+    // Event listener for refresh button
+    if (refreshButton) {
+        refreshButton.addEventListener('click', async () => {
+            refreshStatus.textContent = 'Refreshing... please wait.';
+            refreshStatus.className = '';
+            refreshButton.disabled = true;
+
+            try {
+                const response = await fetch('/refresh_from_youtube', { method: 'POST' });
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    refreshStatus.textContent = result.message || 'Refresh successful!';
+                    refreshStatus.classList.add('success');
+                    // Actualizar datos globales y redibujar todo
+                    window.tagColors = result.tag_colors;
+                    updateChannelList(result.channels);
+                    updateTagFilters(result.unique_tags);
+                    // Reset filter visually and logically
+                    tagFilterList.querySelectorAll('.tag-filter').forEach(button => button.classList.remove('active'));
+                    tagFilterList.querySelector('.tag-filter[data-tag="all"]')?.classList.add('active');
+                        filterChannelsByTag();
+                } else {
+                     throw new Error(result.message || 'Failed to refresh from YouTube.');
+                }
+
+            } catch (error) {
+                console.error('Error refreshing subscriptions:', error);
+                refreshStatus.textContent = `Error: ${error.message}`;
+                refreshStatus.classList.add('error');
+            } finally {
+                refreshButton.disabled = false;
+                setTimeout(() => {
+                    refreshStatus.textContent = '';
+                    refreshStatus.className = '';
+                }, 5000);
+            }
+        });
+    }
+
+    // Event listeners for Interactive Tag List (Color Palette)
+    if (interactiveTagList) {
+        // Listener para MOSTRAR/OCULTAR paleta
+        interactiveTagList.addEventListener('click', (event) => {
+            if (event.target.classList.contains('tag-clickable')) {
+                const palette = event.target.nextElementSibling;
+                if (palette && palette.classList.contains('color-palette')) {
+                    interactiveTagList.querySelectorAll('.color-palette:not(.hidden)')
+                        .forEach(p => { if (p !== palette) p.classList.add('hidden'); });
+                    palette.classList.toggle('hidden');
+                }
+                 // Ocultar la paleta si se hace clic fuera de ella o del tag
+                 document.addEventListener('click', hidePaletteOnClickOutside, { once: true, capture: true });
+            }
+        }, true); // Use capture phase maybe? Or handle outside click better. Let's try basic first.
+
+        // Listener para SELECCIONAR color
+        interactiveTagList.addEventListener('click', async (event) => {
+            if (event.target.classList.contains('color-option')) {
+                event.stopPropagation(); // Prevent click from bubbling up to the toggle listener immediately
+                const button = event.target;
+                const newColor = button.dataset.color;
+                const tagEntry = button.closest('.tag-entry');
+                const tagSpan = tagEntry?.querySelector('.tag-display');
+                const tag = tagSpan?.dataset.tag;
+                const palette = button.closest('.color-palette');
+
+                if (!tag || !newColor || !palette) return;
+
+                palette.classList.add('hidden'); // Ocultar paleta
+
+                if (getTagColor(tag) === newColor) return; // No hacer nada si el color es el mismo
 
                 try {
-                    const response = await fetch('/refresh_from_youtube', { method: 'POST' });
+                    const response = await fetch(`/api/tags/color/${encodeURIComponent(tag)}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ color: newColor }),
+                    });
                     const result = await response.json();
 
                     if (response.ok && result.success) {
-                        refreshStatus.textContent = result.message || 'Refresh successful!';
-                        refreshStatus.classList.add('success');
-                        // Actualizar datos globales y redibujar todo
-                        window.tagColors = result.tag_colors;
-                        updateChannelList(result.channels);
-                        updateTagFilters(result.unique_tags);
-                        // Reset filter visually and logically
-                        tagFilterList.querySelectorAll('.tag-filter').forEach(button => button.classList.remove('active'));
-                        tagFilterList.querySelector('.tag-filter[data-tag="all"]')?.classList.add('active');
-                        filterChannelsByTag();
+                        window.tagColors = result.all_colors; // Actualizar mapa global
+                        updateTagColorOnPage(tag, newColor); // Actualizar UI
                     } else {
-                         throw new Error(result.message || 'Failed to refresh from YouTube.');
+                        throw new Error(result.message || 'Failed to update color');
                     }
-
                 } catch (error) {
-                    console.error('Error refreshing subscriptions:', error);
-                    refreshStatus.textContent = `Error: ${error.message}`;
-                    refreshStatus.classList.add('error');
-                } finally {
-                    refreshButton.disabled = false;
-                    setTimeout(() => {
-                        refreshStatus.textContent = '';
-                        refreshStatus.className = '';
-                    }, 5000);
+                    console.error(`Error updating color for tag ${tag}:`, error);
+                    alert(`Error updating color: ${error.message}`); // Informar al usuario
                 }
-            });
-        }
+            }
+        });
+    }
 
-        // Event listeners for Interactive Tag List (Color Palette)
-        if (interactiveTagList) {
-            // Listener para MOSTRAR/OCULTAR paleta
-            interactiveTagList.addEventListener('click', (event) => {
-                if (event.target.classList.contains('tag-clickable')) {
-                    const palette = event.target.nextElementSibling;
-                    if (palette && palette.classList.contains('color-palette')) {
-                        interactiveTagList.querySelectorAll('.color-palette:not(.hidden)')
-                            .forEach(p => { if (p !== palette) p.classList.add('hidden'); });
-                        palette.classList.toggle('hidden');
-                    }
-                     // Ocultar la paleta si se hace clic fuera de ella o del tag
-                     document.addEventListener('click', hidePaletteOnClickOutside, { once: true, capture: true });
-                }
-            }, true); // Use capture phase maybe? Or handle outside click better. Let's try basic first.
-
-            // Listener para SELECCIONAR color
-            interactiveTagList.addEventListener('click', async (event) => {
-                if (event.target.classList.contains('color-option')) {
-                    event.stopPropagation(); // Prevent click from bubbling up to the toggle listener immediately
-                    const button = event.target;
-                    const newColor = button.dataset.color;
-                    const tagEntry = button.closest('.tag-entry');
-                    const tagSpan = tagEntry?.querySelector('.tag-display');
-                    const tag = tagSpan?.dataset.tag;
-                    const palette = button.closest('.color-palette');
-
-                    if (!tag || !newColor || !palette) return;
-
-                    palette.classList.add('hidden'); // Ocultar paleta
-
-                    if (getTagColor(tag) === newColor) return; // No hacer nada si el color es el mismo
-
-                    try {
-                        const response = await fetch(`/api/tags/color/${encodeURIComponent(tag)}`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ color: newColor }),
-                        });
-                        const result = await response.json();
-
-                        if (response.ok && result.success) {
-                            window.tagColors = result.all_colors; // Actualizar mapa global
-                            updateTagColorOnPage(tag, newColor); // Actualizar UI
-                        } else {
-                            throw new Error(result.message || 'Failed to update color');
-                        }
-                    } catch (error) {
-                        console.error(`Error updating color for tag ${tag}:`, error);
-                        alert(`Error updating color: ${error.message}`); // Informar al usuario
-                    }
-                }
-            });
-        }
-
-         // Helper to hide palettes when clicking outside
-         function hidePaletteOnClickOutside(event) {
-            if (!interactiveTagList) return;
-             const openPalette = interactiveTagList.querySelector('.color-palette:not(.hidden)');
-             if (openPalette && !openPalette.contains(event.target) && !openPalette.previousElementSibling.contains(event.target)) {
-                 openPalette.classList.add('hidden');
-             } else if (openPalette) {
-                 // Re-attach listener if click was inside but didn't close it (e.g. on palette bg)
-                 document.addEventListener('click', hidePaletteOnClickOutside, { once: true, capture: true });
-             }
+     // Helper to hide palettes when clicking outside
+     function hidePaletteOnClickOutside(event) {
+        if (!interactiveTagList) return;
+         const openPalette = interactiveTagList.querySelector('.color-palette:not(.hidden)');
+         if (openPalette && !openPalette.contains(event.target) && !openPalette.previousElementSibling.contains(event.target)) {
+             openPalette.classList.add('hidden');
+         } else if (openPalette) {
+             // Re-attach listener if click was inside but didn't close it (e.g. on palette bg)
+             document.addEventListener('click', hidePaletteOnClickOutside, { once: true, capture: true });
          }
+     }
     }
 
     // Initial filter application (show all)
