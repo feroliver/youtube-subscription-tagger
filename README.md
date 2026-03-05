@@ -99,3 +99,44 @@ Sigue estos pasos para configurar y ejecutar la aplicación localmente:
 
 * El servidor `flask run` es para desarrollo. Para un despliegue en producción, considera usar un servidor WSGI como Gunicorn o uWSGI.
 * Los datos (tags, colores) se guardan localmente en `subscriptions.db`. Haz una copia de seguridad si lo consideras necesario.
+
+## Migración desde una instalación existente
+
+Si ya tienes una instancia funcionando y quieres pasar todo a una instalación nueva ("virgen"), sigue este proceso para conservar datos y evitar volver a autorizar desde cero.
+
+### Archivos que debes copiar del sistema viejo al nuevo
+
+1. **`subscriptions.db`** (obligatorio para conservar información)
+   * Contiene los canales, tags y colores guardados.
+2. **`token.pickle`** (recomendado)
+   * Conserva la sesión OAuth para no tener que autorizar de nuevo al iniciar la app.
+3. **`client_secrets.json`** (solo si usas las mismas credenciales OAuth)
+   * Mantiene la misma configuración de Google Cloud en el sistema nuevo.
+
+> Consejo: copia estos archivos de forma segura y nunca los subas a repos públicos.
+
+### Proceso recomendado de migración
+
+1. Instala el proyecto nuevo siguiendo la sección **Instalación y Configuración**.
+2. En el sistema viejo, detén la aplicación para evitar escrituras mientras haces la copia.
+3. Haz backup de los archivos clave:
+   ```bash
+   cp subscriptions.db subscriptions.db.bak
+   cp token.pickle token.pickle.bak
+   cp client_secrets.json client_secrets.json.bak
+   ```
+4. Copia `subscriptions.db`, `token.pickle` y `client_secrets.json` a la carpeta raíz del sistema nuevo.
+5. Inicia la aplicación nueva:
+   ```bash
+   flask run
+   ```
+6. Verifica que:
+   * Se muestran tus suscripciones anteriores.
+   * Se mantienen tags y colores.
+   * No se solicita autorización OAuth nuevamente (si migraste `token.pickle`).
+
+### ¿Qué pasa si no copio alguno?
+
+* Si no copias **`subscriptions.db`**, perderás tags y colores previos en la instalación nueva.
+* Si no copias **`token.pickle`**, solo tendrás que volver a autorizar la cuenta de Google.
+* Si no copias **`client_secrets.json`**, la app no podrá iniciar el flujo OAuth hasta que agregues uno válido.
