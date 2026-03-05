@@ -10,6 +10,7 @@
     <header>
         <h1>Canales Suscriptos de: {{ user_channel_title if user_channel_title else 'Ti' }}</h1>
         <button id="refresh-button">Refresh from YouTube</button>
+        <button id="new-channels-button" disabled>NEW</button>
         <p id="refresh-status"></p>
     </header>
 
@@ -17,7 +18,7 @@
         <aside class="filters">
             <h2>Filter by Tag</h2>
             <div id="tag-filter-list">
-                <button class="tag-filter active" data-tag="all" style="background-color: #e0e0e0; border-color: #e0e0e0;">Show All</button>
+                <button class="tag-filter selected" data-tag="all" style="background-color: #e0e0e0; border-color: #e0e0e0;">Show All</button>
                 <button class="tag-filter" data-tag="no-tag" style="background-color: #ff6b6b; border-color: #ff6b6b;">No Tags</button>
                 {% for tag in unique_tags %}
                     {% set color = tag_colors.get(tag, DEFAULT_TAG_COLOR) %}

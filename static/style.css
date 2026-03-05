@@ -38,6 +38,29 @@ header h1 {
     background-color: #eee;
 }
 
+#new-channels-button {
+    padding: 0.5rem 1rem;
+    background-color: #fff;
+    color: #333;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+}
+
+#new-channels-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+#new-channels-button.active {
+    background-color: #2ecc71;
+    border-color: #2ecc71;
+    color: #fff;
+}
+
+
 #refresh-status {
     font-size: 0.9em;
     min-height: 1.2em;
