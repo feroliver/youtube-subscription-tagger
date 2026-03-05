@@ -94,6 +94,7 @@ def refresh_from_youtube():
     db_channel_ids = db.get_all_channel_ids()
 
     ids_to_delete = db_channel_ids - api_channel_ids
+    new_channel_ids = list(api_channel_ids - db_channel_ids)
     if ids_to_delete:
         logging.info(f"Found {len(ids_to_delete)} channels to remove from local DB.")
         deleted_count = 0
@@ -126,10 +127,11 @@ def refresh_from_youtube():
     updated_colors = db.get_tag_colors()
     return jsonify({
         "success": True,
-        "message": f"Refresh complete. Found {len(yt_subscriptions)} subs. Removed {len(ids_to_delete)}. Processed {added_updated_count}.",
+        "message": f"Refresh complete. Found {len(yt_subscriptions)} subs. New {len(new_channel_ids)}. Removed {len(ids_to_delete)}. Processed {added_updated_count}.",
         "channels": updated_channels,
         "unique_tags": updated_tags,
-        "tag_colors": updated_colors
+        "tag_colors": updated_colors,
+        "new_channel_ids": new_channel_ids
         })
 
 

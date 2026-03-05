@@ -5,12 +5,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const channelCountSpan = document.getElementById('channel-count');
     const refreshButton = document.getElementById('refresh-button');
     const refreshStatus = document.getElementById('refresh-status');
+    const newChannelsButton = document.getElementById('new-channels-button');
     const interactiveTagList = document.getElementById('all-unique-tags-list'); // Referencia a la lista de tags interactiva
     const searchInput = document.getElementById('channel-search');
 
     // Obtener la lista de tags únicos del DOM
     const uniqueTags = Array.from(allUniqueTagsList.querySelectorAll('.tag-display'))
         .map(span => span.textContent.trim());
+
+    let newChannelIds = new Set();
+    let isNewFilterActive = false;
 
     // Función para manejar el autocompletado
     function setupTagAutocomplete(inputElement) {
@@ -248,11 +252,35 @@ document.addEventListener('DOMContentLoaded', () => {
          });
     }
 
+    function updateNewButtonState() {
+        if (!newChannelsButton) return;
+
+        const hasNewChannels = newChannelIds.size > 0;
+        newChannelsButton.disabled = !hasNewChannels;
+
+        if (!hasNewChannels) {
+            isNewFilterActive = false;
+            newChannelsButton.classList.remove('active');
+            return;
+        }
+
+        newChannelsButton.classList.toggle('active', isNewFilterActive);
+    }
+
+    function channelMatchesSearch(card, searchText) {
+        if (!searchText) return true;
+
+        const title = card.querySelector('.channel-info h3 a')?.textContent?.toLowerCase() || '';
+        const tags = card.querySelector('.channel-info .current-tags')?.textContent?.toLowerCase() || '';
+        return title.includes(searchText) || tags.includes(searchText);
+    }
+
     // Filtra los canales visibles basado en los tags seleccionados
     function filterChannelsByTag() {
         if (!channelListContainer) return;
         const cards = channelListContainer.querySelectorAll('.channel-card');
         let visibleCount = 0;
+        const searchText = searchInput?.value?.toLowerCase().trim() || '';
 
         // Obtener todos los tags seleccionados
         const selectedTags = Array.from(tagFilterList.querySelectorAll('.tag-filter.selected'))
@@ -261,8 +289,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // Si no hay tags seleccionados o solo está seleccionado "all", mostrar todos
         if (selectedTags.length === 0 || (selectedTags.length === 1 && selectedTags[0] === 'all')) {
             cards.forEach(card => {
-                card.classList.remove('hidden');
-                visibleCount++;
+                const isNewChannel = card.dataset.isNew === 'true';
+                const passesNewFilter = !isNewFilterActive || isNewChannel;
+                const passesSearch = channelMatchesSearch(card, searchText);
+
+                if (passesNewFilter && passesSearch) {
+                    card.classList.remove('hidden');
+                    visibleCount++;
+                } else {
+                    card.classList.add('hidden');
+                }
             });
         } else {
         cards.forEach(card => {
@@ -284,7 +320,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     return tagsOnCard.includes(tag);
                 });
 
-                if (hasAllSelectedTags) {
+                const isNewChannel = card.dataset.isNew === 'true';
+                const passesNewFilter = !isNewFilterActive || isNewChannel;
+                const passesSearch = channelMatchesSearch(card, searchText);
+
+                if (hasAllSelectedTags && passesNewFilter && passesSearch) {
                 card.classList.remove('hidden');
                 visibleCount++;
             } else {
@@ -314,14 +354,24 @@ document.addEventListener('DOMContentLoaded', () => {
              card.className = 'channel-card';
              card.dataset.channelId = channel.channel_id;
              card.dataset.tags = JSON.stringify(channel.tags || []); // Store tags as JSON string
+             card.dataset.isNew = newChannelIds.has(channel.channel_id) ? 'true' : 'false';
 
              const tagsHtml = (channel.tags || [])
                  .map(tag => `<span class="tag-display" style="background-color: ${getTagColor(tag)};">${escapeHtml(tag)}</span>`)
                  .join('');
              const tagsValue = (channel.tags || []).join(', ');
+             const currentRating = Number.isInteger(channel.rating) ? channel.rating : 0;
+             const starsHtml = Array.from({ length: 5 }, (_, index) => {
+                 const value = index + 1;
+                 const filled = value <= currentRating ? 'filled' : '';
+                 return `<span class="star ${filled}" data-value="${value}">&#9733;</span>`;
+             }).join('');
+             const clearRatingHtml = currentRating > 0
+                ? '<span class="clear-rating" title="Clear rating">&#10006;</span>'
+                : '';
 
              // Usar placeholder si no hay thumbnail
-             const thumbnailUrl = channel.thumbnail_url || "{{ url_for('static', filename='placeholder.png') }}"; // Asume que tienes placeholder.png en static
+             const thumbnailUrl = channel.thumbnail_url || '/static/placeholder.png';
 
              card.innerHTML = `
                 <img src="${thumbnailUrl}" alt="${escapeHtml(channel.title)} thumbnail" class="thumbnail">
@@ -331,6 +381,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${escapeHtml(channel.title)}
                         </a>
                     </h3>
+                    <div class="rating-stars" data-channel-id="${channel.channel_id}">
+                        ${starsHtml}
+                        ${clearRatingHtml}
+                    </div>
                     <div class="current-tags" id="tags-${channel.channel_id}">${tagsHtml}</div>
                     <div class="tag-input-section">
                         <input type="text" id="input-${channel.channel_id}" placeholder="Add tags (comma-separated)" value="${escapeHtml(tagsValue)}">
@@ -377,10 +431,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         updateChannelTagsDisplay(channelId, result.tags);
                         const card = button.closest('.channel-card');
                         if(card) card.dataset.tags = JSON.stringify(result.tags);
-                        
-                        // Preserve current filter state
-                        const currentActiveButtons = Array.from(tagFilterList.querySelectorAll('.tag-filter.selected'))
-                            .map(button => button.dataset.tag);
                         
                         updateTagFilters(result.unique_tags);
                         
@@ -536,12 +586,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     refreshStatus.classList.add('success');
                     // Actualizar datos globales y redibujar todo
                     window.tagColors = result.tag_colors;
+                    newChannelIds = new Set(result.new_channel_ids || []);
+                    isNewFilterActive = false;
+                    updateNewButtonState();
                     updateChannelList(result.channels);
                     updateTagFilters(result.unique_tags);
                     // Reset filter visually and logically
-                    tagFilterList.querySelectorAll('.tag-filter').forEach(button => button.classList.remove('active'));
-                    tagFilterList.querySelector('.tag-filter[data-tag="all"]')?.classList.add('active');
-                        filterChannelsByTag();
+                    tagFilterList.querySelectorAll('.tag-filter').forEach(button => button.classList.remove('selected', 'multi-selected'));
+                    tagFilterList.querySelector('.tag-filter[data-tag="all"]')?.classList.add('selected');
+                    filterChannelsByTag();
                 } else {
                      throw new Error(result.message || 'Failed to refresh from YouTube.');
                 }
@@ -557,6 +610,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     refreshStatus.className = '';
                 }, 5000);
             }
+        });
+    }
+
+    if (newChannelsButton) {
+        newChannelsButton.addEventListener('click', () => {
+            if (newChannelsButton.disabled) return;
+            isNewFilterActive = !isNewFilterActive;
+            updateNewButtonState();
+            filterChannelsByTag();
         });
     }
 
@@ -629,28 +691,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Initial filter application (show all)
+    updateNewButtonState();
     filterChannelsByTag();
 
-    // Add this after the existing event listeners
-    searchInput.addEventListener('input', function() {
-        const searchText = this.value.toLowerCase();
-        const channels = document.querySelectorAll('.channel-card');
-        let visibleCount = 0;
-        
-        channels.forEach(channel => {
-            const title = channel.querySelector('.channel-info h3 a').textContent.toLowerCase();
-            const description = channel.querySelector('.channel-info .current-tags').textContent.toLowerCase();
-            
-            if (title.includes(searchText) || description.includes(searchText)) {
-                channel.style.display = '';
-                visibleCount++;
-            } else {
-                channel.style.display = 'none';
-            }
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            filterChannelsByTag();
         });
-        
-        channelCountSpan.textContent = visibleCount;
-    });
+    }
 
 }); // End of DOMContentLoaded
 
