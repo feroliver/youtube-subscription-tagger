@@ -66,7 +66,10 @@ def index():
             unique_tags = db.get_unique_tags()
         elif yt_subscriptions is None:
             logging.error("Failed to fetch subscriptions from YouTube API during initial load.")
-            return "Error fetching subscriptions from YouTube. Please check API status or quotas.", 500
+            return yt.build_user_facing_error_message(
+                "Error fetching subscriptions from YouTube. Please check API status or quotas.",
+                error_context='subscriptions'
+            ), 500
         else:
             logging.warning("Fetched no subscriptions from YouTube API during initial load.")
 
@@ -114,9 +117,10 @@ def favorites_new_videos():
             max_pages=3
         )
         if channel_videos is None:
-            warning_message = (
+            warning_message = yt.build_user_facing_error_message(
                 "No se pudieron actualizar los videos en vivo de YouTube. "
-                "Mostrando el último resultado cacheado."
+                "Mostrando el último resultado cacheado.",
+                error_context='favorite_videos'
             )
             used_cache = True
             break
@@ -156,7 +160,16 @@ def refresh_from_youtube():
 
     yt_subscriptions = yt.get_all_subscriptions(service)
     if yt_subscriptions is None:
-        return jsonify({"success": False, "message": "Failed to fetch subscriptions from YouTube API."}), 500
+        api_error = yt.get_last_api_error() or {}
+        return jsonify({
+            "success": False,
+            "message": yt.build_user_facing_error_message(
+                "Failed to fetch subscriptions from YouTube API.",
+                error_context='subscriptions'
+            ),
+            "error_reason": api_error.get('reason'),
+            "error_status": api_error.get('status')
+        }), 500
 
     logging.info(f"Fetched {len(yt_subscriptions)} channels from YouTube. Comparing with database...")
     api_channel_ids = {sub['channel_id'] for sub in yt_subscriptions}

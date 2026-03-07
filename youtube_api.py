@@ -2,7 +2,9 @@ import os
 import logging
 import pickle
 import re
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -16,6 +18,82 @@ API_SERVICE_NAME = 'youtube'
 API_VERSION = 'v3'
 CLIENT_SECRETS_FILE = 'client_secrets.json'
 TOKEN_PICKLE_FILE = 'token.pickle'
+
+_last_api_error = None
+
+
+def _set_last_api_error(status=None, reason=None, message=None, context=None):
+    global _last_api_error
+    _last_api_error = {
+        "status": status,
+        "reason": reason,
+        "message": message,
+        "context": context
+    }
+
+
+def clear_last_api_error():
+    global _last_api_error
+    _last_api_error = None
+
+
+def get_last_api_error():
+    return _last_api_error
+
+
+def _extract_http_error_details(error):
+    status = getattr(getattr(error, 'resp', None), 'status', None)
+    reason = None
+    message = str(error)
+
+    content = getattr(error, 'content', None)
+    if content:
+        try:
+            if isinstance(content, bytes):
+                content = content.decode('utf-8', errors='ignore')
+            parsed = json.loads(content)
+            api_error = parsed.get('error', {})
+            message = api_error.get('message') or message
+            errors = api_error.get('errors', [])
+            if errors:
+                reason = errors[0].get('reason')
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    return status, reason, message
+
+
+def _next_quota_reset_hint():
+    """Returns a human-friendly hint for YouTube daily quota reset time."""
+    try:
+        pt_tz = ZoneInfo("America/Los_Angeles")
+    except Exception:
+        return "Google suele restablecer la cuota cada día cerca de las 00:00 PT."
+
+    now_pt = datetime.now(pt_tz)
+    next_midnight_pt = (now_pt + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    next_midnight_utc = next_midnight_pt.astimezone(timezone.utc)
+
+    pt_text = next_midnight_pt.strftime("%Y-%m-%d %H:%M %Z")
+    utc_text = next_midnight_utc.strftime("%Y-%m-%d %H:%M UTC")
+    return f"Próximo reset estimado: {pt_text} ({utc_text})."
+
+def build_user_facing_error_message(default_message, error_context=None):
+    details = get_last_api_error()
+    if not details:
+        return default_message
+
+    if details.get('reason') == 'quotaExceeded':
+        return (
+            "Se superó la cuota diaria de la YouTube Data API para este proyecto. "
+            f"{_next_quota_reset_hint()} "
+            "Probá de nuevo más tarde o usá otra API key/proyecto con cuota disponible."
+        )
+
+    if error_context and details.get('context') and error_context != details.get('context'):
+        return default_message
+
+    return details.get('message') or default_message
 
 
 def get_authenticated_service():
@@ -58,6 +136,7 @@ def get_authenticated_service():
                 return None
 
     try:
+        clear_last_api_error()
         youtube_service = build(API_SERVICE_NAME, API_VERSION, credentials=credentials)
         return youtube_service
     except HttpError as e:
@@ -78,6 +157,7 @@ def get_all_subscriptions(youtube_service):
         return None
 
     subscriptions = []
+    clear_last_api_error()
     next_page_token = None
     logging.info("Fetching subscriptions from YouTube API...")
     page_count = 0
@@ -117,6 +197,8 @@ def get_all_subscriptions(youtube_service):
                 break
 
         except HttpError as e:
+            status, reason, message = _extract_http_error_details(e)
+            _set_last_api_error(status=status, reason=reason, message=message, context='subscriptions')
             logging.error(f'An HTTP error {e.resp.status} occurred while fetching subscriptions page {page_count}: {e.content}')
             return None
         except Exception as e:
@@ -137,6 +219,7 @@ def get_my_channel_info(youtube_service):
         return None
 
     try:
+        clear_last_api_error()
         request = youtube_service.channels().list(
             part="snippet",
             mine=True,
@@ -153,6 +236,8 @@ def get_my_channel_info(youtube_service):
         logging.warning("Could not find channel information for the authenticated user.")
         return None
     except HttpError as e:
+        status, reason, message = _extract_http_error_details(e)
+        _set_last_api_error(status=status, reason=reason, message=message, context='channel_info')
         logging.error(f'An HTTP error {e.resp.status} occurred fetching user channel info: {e.content}')
         return None
     except Exception as e:
@@ -209,6 +294,7 @@ def get_new_videos_for_channel(youtube_service, channel_id, channel_title, publi
         return None
 
     try:
+        clear_last_api_error()
         channel_response = youtube_service.channels().list(
             part="contentDetails",
             id=channel_id,
@@ -226,6 +312,8 @@ def get_new_videos_for_channel(youtube_service, channel_id, channel_title, publi
         if not uploads_playlist_id:
             return []
     except HttpError as e:
+        status, reason, message = _extract_http_error_details(e)
+        _set_last_api_error(status=status, reason=reason, message=message, context='favorite_videos')
         logging.error(f"YouTube API error fetching uploads playlist for {channel_id}: {e}")
         return None
     except Exception as e:
@@ -277,6 +365,8 @@ def get_new_videos_for_channel(youtube_service, channel_id, channel_title, publi
             if not page_token:
                 break
         except HttpError as e:
+            status, reason, message = _extract_http_error_details(e)
+            _set_last_api_error(status=status, reason=reason, message=message, context='favorite_videos')
             logging.error(f"YouTube API error fetching videos for {channel_id}: {e}")
             return None
         except Exception as e:
