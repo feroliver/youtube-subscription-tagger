@@ -68,6 +68,7 @@ header h1 {
 }
 #refresh-status.success { color: #a2ff9b; }
 #refresh-status.error { color: #ff8a8a; }
+#refresh-status.quota-warning { color: #ffd166; font-weight: 700; }
 
 /* --- Contenedor Principal --- */
 .container {

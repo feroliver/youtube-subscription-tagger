@@ -596,13 +596,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     tagFilterList.querySelector('.tag-filter[data-tag="all"]')?.classList.add('selected');
                     filterChannelsByTag();
                 } else {
-                     throw new Error(result.message || 'Failed to refresh from YouTube.');
+                    const error = new Error(result.message || 'Failed to refresh from YouTube.');
+                    error.reason = result.error_reason;
+                    throw error;
                 }
 
             } catch (error) {
                 console.error('Error refreshing subscriptions:', error);
                 refreshStatus.textContent = `Error: ${error.message}`;
-                refreshStatus.classList.add('error');
+                refreshStatus.classList.add(error.reason === 'quotaExceeded' ? 'quota-warning' : 'error');
             } finally {
                 refreshButton.disabled = false;
                 setTimeout(() => {
