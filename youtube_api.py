@@ -86,12 +86,16 @@ def get_all_subscriptions(youtube_service):
     while True and page_count < max_pages:
         page_count += 1
         try:
+            request_params = {
+                "part": "snippet",
+                "mine": True,
+                "maxResults": 50
+            }
+            if next_page_token:
+                request_params["pageToken"] = next_page_token
+
             request = youtube_service.subscriptions().list(
-                part="snippet",
-                mine=True,
-                maxResults=50,
-                pageToken=next_page_token,
-                order="alphabetical"
+                **request_params
             )
             response = request.execute()
 
