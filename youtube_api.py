@@ -1,6 +1,8 @@
 import os
 import logging
 import pickle
+import re
+from datetime import datetime, timezone
 
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -14,6 +16,7 @@ API_SERVICE_NAME = 'youtube'
 API_VERSION = 'v3'
 CLIENT_SECRETS_FILE = 'client_secrets.json'
 TOKEN_PICKLE_FILE = 'token.pickle'
+
 
 def get_authenticated_service():
     """Authenticates the user and returns a YouTube API service object."""
@@ -34,19 +37,16 @@ def get_authenticated_service():
             except Exception as e:
                 logging.warning(f"Could not refresh credentials: {e}. Need re-authentication.")
                 if os.path.exists(TOKEN_PICKLE_FILE):
-                    os.remove(TOKEN_PICKLE_FILE) # Remove invalid token
+                    os.remove(TOKEN_PICKLE_FILE)
                 credentials = None
-        # Re-authenticate if needed
         if not credentials:
             if not os.path.exists(CLIENT_SECRETS_FILE):
-                 logging.error(f"'{CLIENT_SECRETS_FILE}' not found. Please download it from Google Cloud Console.")
-                 raise FileNotFoundError(f"'{CLIENT_SECRETS_FILE}' not found.")
+                logging.error(f"'{CLIENT_SECRETS_FILE}' not found. Please download it from Google Cloud Console.")
+                raise FileNotFoundError(f"'{CLIENT_SECRETS_FILE}' not found.")
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
-                # Use run_local_server which handles browser opening and redirect URI better for web context
-                credentials = flow.run_local_server(port=0) # Dynamically find a free port
+                credentials = flow.run_local_server(port=0)
                 logging.info("Authentication successful.")
-                # Save the credentials for the next run
                 try:
                     with open(TOKEN_PICKLE_FILE, 'wb') as token:
                         pickle.dump(credentials, token)
@@ -57,11 +57,8 @@ def get_authenticated_service():
                 logging.error(f"Authentication flow failed: {e}")
                 return None
 
-    # Build the YouTube API service
     try:
         youtube_service = build(API_SERVICE_NAME, API_VERSION, credentials=credentials)
-        # Log successful service build
-        # logging.info("YouTube service authenticated and built successfully.")
         return youtube_service
     except HttpError as e:
         logging.error(f'An HTTP error {e.resp.status} occurred building service: {e.content}')
@@ -73,17 +70,18 @@ def get_authenticated_service():
         logging.error(f"Failed to build YouTube service: {e}")
         return None
 
+
 def get_all_subscriptions(youtube_service):
     """Fetches all subscribed channels for the authenticated user."""
     if not youtube_service:
         logging.error("YouTube service not authenticated for get_all_subscriptions.")
-        return None # Return None on failure
+        return None
 
     subscriptions = []
     next_page_token = None
     logging.info("Fetching subscriptions from YouTube API...")
     page_count = 0
-    max_pages = 50 # Safety break to avoid infinite loops
+    max_pages = 50
 
     while True and page_count < max_pages:
         page_count += 1
@@ -116,18 +114,18 @@ def get_all_subscriptions(youtube_service):
 
         except HttpError as e:
             logging.error(f'An HTTP error {e.resp.status} occurred while fetching subscriptions page {page_count}: {e.content}')
-            return None # Indicate failure
+            return None
         except Exception as e:
             logging.error(f"An unexpected error occurred while fetching subscriptions page {page_count}: {e}")
-            return None # Indicate failure
+            return None
 
     if page_count >= max_pages:
-         logging.warning(f"Stopped fetching subscriptions after {max_pages} pages. Potential issue?")
+        logging.warning(f"Stopped fetching subscriptions after {max_pages} pages. Potential issue?")
 
     logging.info(f"Fetched {len(subscriptions)} subscriptions across {page_count} pages.")
     return subscriptions
 
-# --- NUEVA FUNCIÓN ---
+
 def get_my_channel_info(youtube_service):
     """Fetches the authenticated user's own channel title."""
     if not youtube_service:
@@ -138,7 +136,7 @@ def get_my_channel_info(youtube_service):
         request = youtube_service.channels().list(
             part="snippet",
             mine=True,
-            maxResults=1 # Should only be one channel
+            maxResults=1
         )
         response = request.execute()
 
@@ -147,13 +145,119 @@ def get_my_channel_info(youtube_service):
             title = items[0].get('snippet', {}).get('title')
             logging.info(f"Fetched user's channel title: {title}")
             return title
-        else:
-            logging.warning("Could not find channel information for the authenticated user.")
-            return None
+
+        logging.warning("Could not find channel information for the authenticated user.")
+        return None
     except HttpError as e:
         logging.error(f'An HTTP error {e.resp.status} occurred fetching user channel info: {e.content}')
         return None
     except Exception as e:
         logging.error(f"An unexpected error occurred fetching user channel info: {e}")
         return None
-# --- FIN NUEVA FUNCIÓN ---
+
+
+def _format_duration(duration_iso):
+    if not duration_iso:
+        return None
+
+    match = re.match(r'^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$', duration_iso)
+    if not match:
+        return None
+
+    hours = int(match.group(1) or 0)
+    minutes = int(match.group(2) or 0)
+    seconds = int(match.group(3) or 0)
+
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes}:{seconds:02d}"
+
+
+def _load_video_durations(youtube_service, video_ids):
+    durations = {}
+    if not video_ids:
+        return durations
+
+    for start in range(0, len(video_ids), 50):
+        chunk = video_ids[start:start + 50]
+        try:
+            response = youtube_service.videos().list(
+                part="contentDetails",
+                id=','.join(chunk),
+                maxResults=50
+            ).execute()
+            for item in response.get('items', []):
+                vid = item.get('id')
+                iso_duration = item.get('contentDetails', {}).get('duration')
+                durations[vid] = _format_duration(iso_duration)
+        except Exception as e:
+            logging.warning(f"Could not fetch video durations for chunk: {e}")
+
+    return durations
+
+
+def get_new_videos_for_channel(youtube_service, channel_id, channel_title, published_after=None, max_pages=3):
+    """Fetches newest videos for a given channel, optionally after a timestamp."""
+    if not youtube_service:
+        return None
+
+    videos = []
+    page_token = None
+    pages = 0
+
+    while pages < max_pages:
+        pages += 1
+        try:
+            request_params = {
+                "part": "snippet",
+                "channelId": channel_id,
+                "order": "date",
+                "type": "video",
+                "maxResults": 50,
+                "pageToken": page_token
+            }
+            if published_after:
+                request_params["publishedAfter"] = published_after
+
+            response = youtube_service.search().list(**request_params).execute()
+            items = response.get('items', [])
+            if not items:
+                break
+
+            for item in items:
+                snippet = item.get('snippet', {})
+                video_id = item.get('id', {}).get('videoId')
+                if not video_id:
+                    continue
+
+                videos.append({
+                    "video_id": video_id,
+                    "channel_id": channel_id,
+                    "channel_title": channel_title,
+                    "title": snippet.get('title', 'Untitled'),
+                    "published_at": snippet.get('publishedAt'),
+                    "thumbnail_url": snippet.get('thumbnails', {}).get('medium', {}).get('url') or snippet.get('thumbnails', {}).get('default', {}).get('url'),
+                    "video_url": f"https://www.youtube.com/watch?v={video_id}",
+                    "duration_text": None
+                })
+
+            page_token = response.get('nextPageToken')
+            if not page_token:
+                break
+        except HttpError as e:
+            logging.error(f"YouTube API error fetching videos for {channel_id}: {e}")
+            return None
+        except Exception as e:
+            logging.error(f"Unexpected error fetching videos for {channel_id}: {e}")
+            return None
+
+    duration_map = _load_video_durations(youtube_service, [video['video_id'] for video in videos])
+    for video in videos:
+        video['duration_text'] = duration_map.get(video['video_id'])
+
+    videos.sort(key=lambda video: video.get('published_at') or '', reverse=True)
+    return videos
+
+
+def utc_now_iso():
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
