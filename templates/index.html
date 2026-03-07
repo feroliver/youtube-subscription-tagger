@@ -10,6 +10,10 @@
     <header>
         <h1>Canales Suscriptos de: {{ user_channel_title if user_channel_title else 'Ti' }}</h1>
         <button id="refresh-button">Refresh from YouTube</button>
+        <a href="{{ url_for('favorites_new_videos') }}" class="favorites-link-button">
+            Nuevos de favoritos
+            <span class="favorites-count">{{ favorites_new_count }}</span>
+        </a>
         <button id="new-channels-button" disabled>NEW</button>
         <p id="refresh-status"></p>
     </header>

@@ -8,6 +8,7 @@ DEFAULT_TAG_COLOR = '#cccccc'
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+
 def get_db_connection():
     """Establishes a connection to the SQLite database."""
     try:
@@ -17,6 +18,7 @@ def get_db_connection():
     except sqlite3.Error as e:
         logging.error(f"Database connection error: {e}")
         return None
+
 
 def init_db():
     """Initializes the database and creates tables if they don't exist."""
@@ -39,26 +41,51 @@ def init_db():
                     color TEXT DEFAULT '{DEFAULT_TAG_COLOR}'
                 )
             ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS app_state (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS favorite_video_cache (
+                    video_id TEXT PRIMARY KEY,
+                    channel_id TEXT NOT NULL,
+                    channel_title TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    published_at TEXT NOT NULL,
+                    thumbnail_url TEXT,
+                    video_url TEXT NOT NULL,
+                    duration_text TEXT
+                )
+            ''')
+
             # Check and add rating column if it doesn't exist (for migrations)
             try:
                 cursor.execute("SELECT rating FROM channels LIMIT 1")
             except sqlite3.OperationalError:
                 logging.info("Adding 'rating' column to existing 'channels' table.")
                 cursor.execute("ALTER TABLE channels ADD COLUMN rating INTEGER DEFAULT NULL")
+
+            # Migration for old favorite_video_cache without duration_text
+            try:
+                cursor.execute("SELECT duration_text FROM favorite_video_cache LIMIT 1")
+            except sqlite3.OperationalError:
+                logging.info("Adding 'duration_text' column to existing 'favorite_video_cache' table.")
+                cursor.execute("ALTER TABLE favorite_video_cache ADD COLUMN duration_text TEXT")
+
             conn.commit()
             logging.info("Database initialized successfully.")
         except sqlite3.Error as e:
-            # Asegurarse que el error no sea el de sintaxis anterior
             if "syntax error" in str(e):
-                 logging.error(f"DATABASE SCHEMA SYNTAX ERROR: {e}")
-                 # Considerar acciones más drásticas si el esquema es inválido
+                logging.error(f"DATABASE SCHEMA SYNTAX ERROR: {e}")
             else:
-                 logging.error(f"Error initializing database table: {e}")
-
+                logging.error(f"Error initializing database table: {e}")
         finally:
             conn.close()
     else:
         logging.error("Could not get DB connection for initialization.")
+
 
 def add_or_update_channel(channel_id, title, thumbnail_url):
     """Adds a new channel or updates the title/thumbnail if it already exists. Preserves existing tags and rating."""
@@ -66,12 +93,10 @@ def add_or_update_channel(channel_id, title, thumbnail_url):
     if conn:
         try:
             cursor = conn.cursor()
-            # Insert if not exists, keeping existing rating/tags if the row is ignored
             cursor.execute('''
                 INSERT OR IGNORE INTO channels (channel_id, title, thumbnail_url, tags, rating)
                 VALUES (?, ?, ?, '[]', NULL)
             ''', (channel_id, title, thumbnail_url))
-            # Update title and thumbnail, but NOT tags or rating here
             cursor.execute('''
                 UPDATE channels
                 SET title = ?, thumbnail_url = ?
@@ -82,6 +107,7 @@ def add_or_update_channel(channel_id, title, thumbnail_url):
             logging.error(f"Error adding/updating channel {channel_id}: {e}")
         finally:
             conn.close()
+
 
 def update_channel_tags(channel_id, tags_list):
     """Updates the tags for a specific channel."""
@@ -103,10 +129,11 @@ def update_channel_tags(channel_id, tags_list):
         except sqlite3.Error as e:
             logging.error(f"Error updating tags for channel {channel_id}: {e}")
         except json.JSONDecodeError as e:
-             logging.error(f"Error encoding tags for channel {channel_id}: {e}")
+            logging.error(f"Error encoding tags for channel {channel_id}: {e}")
         finally:
             conn.close()
     return success
+
 
 def get_all_channels():
     """Retrieves all channels from the database, ordered by rating (desc, NULLs last) then title."""
@@ -115,33 +142,52 @@ def get_all_channels():
     if conn:
         try:
             cursor = conn.cursor()
-            # Asegurarse que la tabla existe antes de consultar
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='channels';")
             if cursor.fetchone():
-                 # Include rating in SELECT and ORDER BY rating DESC NULLS LAST, then title
-                 cursor.execute('''
-                     SELECT channel_id, title, thumbnail_url, tags, rating
-                     FROM channels
-                     ORDER BY rating DESC NULLS LAST, title COLLATE NOCASE ASC
-                 ''')
-                 rows = cursor.fetchall()
-                 for row in rows:
+                cursor.execute('''
+                    SELECT channel_id, title, thumbnail_url, tags, rating
+                    FROM channels
+                    ORDER BY rating DESC NULLS LAST, title COLLATE NOCASE ASC
+                ''')
+                rows = cursor.fetchall()
+                for row in rows:
                     channel_dict = dict(row)
                     try:
                         channel_dict['tags'] = json.loads(channel_dict.get('tags', '[]') or '[]')
                     except json.JSONDecodeError:
-                         channel_dict['tags'] = []
-                    # Ensure rating is an integer or None
+                        channel_dict['tags'] = []
                     channel_dict['rating'] = channel_dict.get('rating') if channel_dict.get('rating') is not None else None
                     channels.append(channel_dict)
             else:
-                 logging.warning("Table 'channels' does not exist yet.")
+                logging.warning("Table 'channels' does not exist yet.")
 
         except sqlite3.Error as e:
             logging.error(f"Error fetching all channels: {e}")
         finally:
             conn.close()
     return channels
+
+
+def get_favorite_channels(min_rating=4):
+    """Retrieves channels with rating >= min_rating."""
+    conn = get_db_connection()
+    favorites = []
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT channel_id, title, thumbnail_url, rating
+                FROM channels
+                WHERE rating >= ?
+                ORDER BY rating DESC, title COLLATE NOCASE ASC
+            ''', (min_rating,))
+            favorites = [dict(row) for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            logging.error(f"Error fetching favorite channels: {e}")
+        finally:
+            conn.close()
+    return favorites
+
 
 def get_unique_tags():
     """Retrieves a list of all unique tags used across all channels."""
@@ -150,6 +196,7 @@ def get_unique_tags():
     for channel in all_channels:
         unique_tags.update(channel.get('tags', []))
     return sorted(list(unique_tags))
+
 
 def set_tag_color(tag, color):
     """Guarda o actualiza el color para un tag específico."""
@@ -171,6 +218,7 @@ def set_tag_color(tag, color):
             conn.close()
     return success
 
+
 def get_tag_colors():
     """Recupera un diccionario con los colores asignados a cada tag."""
     conn = get_db_connection()
@@ -178,7 +226,6 @@ def get_tag_colors():
     if conn:
         try:
             cursor = conn.cursor()
-             # Asegurarse que la tabla existe
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tag_colors';")
             if cursor.fetchone():
                 cursor.execute('SELECT tag, color FROM tag_colors')
@@ -186,14 +233,14 @@ def get_tag_colors():
                 for row in rows:
                     colors[row['tag']] = row['color'] if row['color'] else DEFAULT_TAG_COLOR
             else:
-                 logging.warning("Table 'tag_colors' does not exist yet.")
+                logging.warning("Table 'tag_colors' does not exist yet.")
         except sqlite3.Error as e:
             logging.error(f"Error fetching tag colors: {e}")
         finally:
             conn.close()
     return colors
 
-# --- NUEVAS FUNCIONES ---
+
 def get_all_channel_ids():
     """Recupera un set con todos los channel_id de la base de datos."""
     conn = get_db_connection()
@@ -208,12 +255,13 @@ def get_all_channel_ids():
                 for row in rows:
                     channel_ids.add(row['channel_id'])
             else:
-                 logging.warning("Table 'channels' does not exist for get_all_channel_ids.")
+                logging.warning("Table 'channels' does not exist for get_all_channel_ids.")
         except sqlite3.Error as e:
             logging.error(f"Error fetching all channel IDs: {e}")
         finally:
             conn.close()
     return channel_ids
+
 
 def delete_channel(channel_id):
     """Elimina un canal específico de la base de datos."""
@@ -224,18 +272,18 @@ def delete_channel(channel_id):
             cursor = conn.cursor()
             cursor.execute('DELETE FROM channels WHERE channel_id = ?', (channel_id,))
             conn.commit()
-            # Verificar si se borró algo
             if cursor.rowcount > 0:
-                 logging.info(f"Deleted channel with ID: {channel_id}")
-                 success = True
+                logging.info(f"Deleted channel with ID: {channel_id}")
+                success = True
             else:
-                 logging.warning(f"Attempted to delete channel ID {channel_id}, but it was not found.")
-                 success = True # Considerar True si no existía, no es un error de DB
+                logging.warning(f"Attempted to delete channel ID {channel_id}, but it was not found.")
+                success = True
         except sqlite3.Error as e:
             logging.error(f"Error deleting channel {channel_id}: {e}")
         finally:
             conn.close()
     return success
+
 
 def update_channel_rating(channel_id, rating):
     """Updates the rating for a specific channel."""
@@ -243,7 +291,6 @@ def update_channel_rating(channel_id, rating):
     success = False
     if conn:
         try:
-            # Validate rating (should be 1-5 or None)
             validated_rating = int(rating) if rating is not None and 1 <= int(rating) <= 5 else None
 
             cursor = conn.cursor()
@@ -257,14 +304,126 @@ def update_channel_rating(channel_id, rating):
                 logging.info(f"Updated rating for channel {channel_id} to {validated_rating}")
                 success = True
             else:
-                 logging.warning(f"Attempted to update rating for channel {channel_id}, but it was not found.")
-                 # Consider success if not found? Depends on desired behavior. Let's say False for now.
-                 success = False
-        except (sqlite3.Error, ValueError) as e: # Catch DB errors and invalid integer conversion
+                logging.warning(f"Attempted to update rating for channel {channel_id}, but it was not found.")
+                success = False
+        except (sqlite3.Error, ValueError) as e:
             logging.error(f"Error updating rating for channel {channel_id}: {e}")
         finally:
             conn.close()
     return success
+
+
+def set_app_state(key, value):
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO app_state (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        ''', (key, value))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        logging.error(f"Error setting app state for key {key}: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def get_app_state(key, default_value=None):
+    conn = get_db_connection()
+    if not conn:
+        return default_value
+    try:
+        cursor = conn.cursor()
+        cursor.execute('SELECT value FROM app_state WHERE key = ?', (key,))
+        row = cursor.fetchone()
+        return row['value'] if row else default_value
+    except sqlite3.Error as e:
+        logging.error(f"Error getting app state for key {key}: {e}")
+        return default_value
+    finally:
+        conn.close()
+
+
+def get_last_favorites_check():
+    return get_app_state('favorites_last_check_at')
+
+
+def set_last_favorites_check(timestamp_iso):
+    return set_app_state('favorites_last_check_at', timestamp_iso)
+
+
+def replace_favorite_video_cache(videos):
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM favorite_video_cache')
+        cursor.executemany('''
+            INSERT INTO favorite_video_cache (
+                video_id, channel_id, channel_title, title, published_at, thumbnail_url, video_url, duration_text
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', [
+            (
+                video.get('video_id'),
+                video.get('channel_id'),
+                video.get('channel_title'),
+                video.get('title'),
+                video.get('published_at'),
+                video.get('thumbnail_url'),
+                video.get('video_url'),
+                video.get('duration_text')
+            )
+            for video in videos
+        ])
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        logging.error(f"Error replacing favorite video cache: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def get_favorite_video_cache():
+    conn = get_db_connection()
+    videos = []
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT video_id, channel_id, channel_title, title, published_at, thumbnail_url, video_url, duration_text
+                FROM favorite_video_cache
+                ORDER BY channel_title COLLATE NOCASE ASC, published_at DESC
+            ''')
+            videos = [dict(row) for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            logging.error(f"Error reading favorite video cache: {e}")
+        finally:
+            conn.close()
+    return videos
+
+
+def get_favorite_video_cache_count():
+    conn = get_db_connection()
+    count = 0
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(1) AS total FROM favorite_video_cache')
+            row = cursor.fetchone()
+            count = row['total'] if row else 0
+        except sqlite3.Error as e:
+            logging.error(f"Error reading favorite video cache count: {e}")
+        finally:
+            conn.close()
+    return count
+
 
 # Initialize the database when this module is imported
 init_db()

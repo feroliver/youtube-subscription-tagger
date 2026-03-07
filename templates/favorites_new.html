@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nuevos de favoritos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Nuevos de favoritos (4★ y 5★)</h1>
+        <a href="{{ url_for('index') }}" class="favorites-link-button">← Volver</a>
+        <p id="refresh-status">
+            Se encontraron <strong>{{ total_new_videos }}</strong> videos nuevos en <strong>{{ total_channels }}</strong> canales.
+            {% if last_check %}
+                Última verificación anterior: {{ last_check }}.
+            {% endif %}
+        </p>
+        {% if warning_message %}
+            <p class="error">{{ warning_message }}</p>
+        {% endif %}
+    </header>
+
+    <main class="favorites-page">
+        {% if videos_by_channel %}
+            {% for channel_title, videos in videos_by_channel.items() %}
+                <section class="favorites-channel-group">
+                    <h2>{{ channel_title }} <span>({{ videos|length }})</span></h2>
+                    <ul class="favorites-video-list">
+                        {% for video in videos %}
+                            <li class="favorites-video-item">
+                                <img src="{{ video.thumbnail_url if video.thumbnail_url else url_for('static', filename='placeholder.png') }}" alt="Miniatura de {{ video.title }}" class="favorites-thumbnail">
+                                <div class="favorites-video-meta">
+                                    <a href="{{ video.video_url }}" target="_blank" rel="noopener noreferrer">{{ video.title }}</a>
+                                    <p>Publicado: {{ video.published_at }}</p>
+                                    {% if video.duration_text %}
+                                        <p>Duración: {{ video.duration_text }}</p>
+                                    {% endif %}
+                                </div>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </section>
+            {% endfor %}
+        {% else %}
+            <p>No hay videos nuevos para mostrar en este momento.</p>
+        {% endif %}
+    </main>
+</body>
+</html>
