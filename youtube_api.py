@@ -201,8 +201,35 @@ def _load_video_durations(youtube_service, video_ids):
 
 
 def get_new_videos_for_channel(youtube_service, channel_id, channel_title, published_after=None, max_pages=3):
-    """Fetches newest videos for a given channel, optionally after a timestamp."""
+    """Fetches newest videos for a given channel, optionally after a timestamp.
+
+    Uses channel uploads playlist instead of `search.list` to keep quota usage low.
+    """
     if not youtube_service:
+        return None
+
+    try:
+        channel_response = youtube_service.channels().list(
+            part="contentDetails",
+            id=channel_id,
+            maxResults=1
+        ).execute()
+        channel_items = channel_response.get('items', [])
+        if not channel_items:
+            return []
+        uploads_playlist_id = (
+            channel_items[0]
+            .get('contentDetails', {})
+            .get('relatedPlaylists', {})
+            .get('uploads')
+        )
+        if not uploads_playlist_id:
+            return []
+    except HttpError as e:
+        logging.error(f"YouTube API error fetching uploads playlist for {channel_id}: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"Unexpected error fetching uploads playlist for {channel_id}: {e}")
         return None
 
     videos = []
@@ -213,25 +240,26 @@ def get_new_videos_for_channel(youtube_service, channel_id, channel_title, publi
         pages += 1
         try:
             request_params = {
-                "part": "snippet",
-                "channelId": channel_id,
-                "order": "date",
-                "type": "video",
-                "maxResults": 50,
-                "pageToken": page_token
+                "part": "snippet,contentDetails",
+                "playlistId": uploads_playlist_id,
+                "maxResults": 50
             }
-            if published_after:
-                request_params["publishedAfter"] = published_after
+            if page_token:
+                request_params["pageToken"] = page_token
 
-            response = youtube_service.search().list(**request_params).execute()
+            response = youtube_service.playlistItems().list(**request_params).execute()
             items = response.get('items', [])
             if not items:
                 break
 
             for item in items:
                 snippet = item.get('snippet', {})
-                video_id = item.get('id', {}).get('videoId')
+                content_details = item.get('contentDetails', {})
+                video_id = content_details.get('videoId') or snippet.get('resourceId', {}).get('videoId')
+                published_at = content_details.get('videoPublishedAt') or snippet.get('publishedAt')
                 if not video_id:
+                    continue
+                if published_after and published_at and published_at <= published_after:
                     continue
 
                 videos.append({
@@ -239,7 +267,7 @@ def get_new_videos_for_channel(youtube_service, channel_id, channel_title, publi
                     "channel_id": channel_id,
                     "channel_title": channel_title,
                     "title": snippet.get('title', 'Untitled'),
-                    "published_at": snippet.get('publishedAt'),
+                    "published_at": published_at,
                     "thumbnail_url": snippet.get('thumbnails', {}).get('medium', {}).get('url') or snippet.get('thumbnails', {}).get('default', {}).get('url'),
                     "video_url": f"https://www.youtube.com/watch?v={video_id}",
                     "duration_text": None
