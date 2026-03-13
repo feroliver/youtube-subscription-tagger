@@ -22,6 +22,14 @@
     </header>
 
     <main class="favorites-page">
+        <section class="favorites-view-controls" aria-label="Agrupar y ordenar resultados">
+            <a href="{{ url_for('favorites_new_videos', view='channel') }}" class="favorites-view-button {% if view_mode == 'channel' %}active{% endif %}">Canal</a>
+            <a href="{{ url_for('favorites_new_videos', view='date_desc') }}" class="favorites-view-button {% if view_mode == 'date_desc' %}active{% endif %}">Fecha descendente</a>
+            <a href="{{ url_for('favorites_new_videos', view='date_asc') }}" class="favorites-view-button {% if view_mode == 'date_asc' %}active{% endif %}">Fecha ascendente</a>
+            <a href="{{ url_for('favorites_new_videos', view='last_7_days') }}" class="favorites-view-button {% if view_mode == 'last_7_days' %}active{% endif %}">Últimos 7 días</a>
+            <a href="{{ url_for('favorites_new_videos', view='last_30_days') }}" class="favorites-view-button {% if view_mode == 'last_30_days' %}active{% endif %}">Últimos 30 días</a>
+        </section>
+
         {% if videos_by_channel %}
             {% for channel_title, videos in videos_by_channel.items() %}
                 <section class="favorites-channel-group">
