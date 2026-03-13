@@ -103,9 +103,7 @@ def favorites_new_videos():
             total_channels=0,
             warning_message=None,
             last_check=last_check,
-            used_cache=False,
-            view_mode='channel',
-            videos=[]
+            used_cache=False
         )
 
     fetched_videos = []
@@ -152,9 +150,7 @@ def favorites_new_videos():
         total_channels=total_channels,
         warning_message=warning_message,
         last_check=last_check,
-        used_cache=used_cache,
-        view_mode='channel',
-        videos=videos
+        used_cache=used_cache
     )
 
 

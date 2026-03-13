@@ -57,7 +57,11 @@
         </div>
     </main>
 
-    <script id="favorites-videos-data" type="application/json" data-placeholder="{{ url_for('static', filename='placeholder.png') }}">{{ videos|tojson }}</script>
+    {% set ns = namespace(all_videos=[]) %}
+    {% for channel_title, channel_videos in videos_by_channel.items() %}
+        {% set ns.all_videos = ns.all_videos + channel_videos %}
+    {% endfor %}
+    <script id="favorites-videos-data" type="application/json" data-placeholder="{{ url_for('static', filename='placeholder.png') }}">{{ ns.all_videos|tojson }}</script>
     <script src="{{ url_for('static', filename='favorites_new.js') }}"></script>
 </body>
 </html>
