@@ -541,3 +541,33 @@ header h1 {
     font-size: 0.9rem;
     color: #555;
 }
+
+
+.favorites-view-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.favorites-view-button {
+    text-decoration: none;
+    border: 1px solid #ccc;
+    background: #fff;
+    color: #333;
+    border-radius: 18px;
+    padding: 6px 12px;
+    font-size: 0.9rem;
+}
+
+.favorites-view-button:hover {
+    border-color: #c4302b;
+    color: #c4302b;
+}
+
+.favorites-view-button.active {
+    background: #c4302b;
+    border-color: #c4302b;
+    color: #fff;
+}
+

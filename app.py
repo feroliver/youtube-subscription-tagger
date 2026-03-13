@@ -1,5 +1,6 @@
 import logging
 from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify
 import database as db
 import youtube_api as yt
@@ -22,6 +23,47 @@ def group_videos_by_channel(videos):
     for video in videos:
         channel_title = video.get('channel_title', 'Sin canal')
         grouped.setdefault(channel_title, []).append(video)
+    return grouped
+
+
+def parse_iso_datetime(value):
+    if not value:
+        return None
+    normalized = value.replace('Z', '+00:00')
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def build_favorites_sections(videos, view_mode):
+    if view_mode == 'date_desc':
+        sorted_videos = sorted(videos, key=lambda video: video.get('published_at') or '', reverse=True)
+        return OrderedDict([('Todos los canales (más recientes primero)', sorted_videos)])
+
+    if view_mode == 'date_asc':
+        sorted_videos = sorted(videos, key=lambda video: video.get('published_at') or '')
+        return OrderedDict([('Todos los canales (más antiguos primero)', sorted_videos)])
+
+    if view_mode in ('last_7_days', 'last_30_days'):
+        days = 7 if view_mode == 'last_7_days' else 30
+        threshold = datetime.now(timezone.utc) - timedelta(days=days)
+        filtered = []
+        for video in videos:
+            published_at = parse_iso_datetime(video.get('published_at'))
+            if published_at and published_at >= threshold:
+                filtered.append(video)
+        sorted_videos = sorted(filtered, key=lambda video: video.get('published_at') or '')
+        label = f'Todos los canales (últimos {days} días, del más viejo al más nuevo)'
+        return OrderedDict([(label, sorted_videos)])
+
+    grouped = OrderedDict()
+    for channel_title in sorted({video.get('channel_title', 'Sin canal') for video in videos}, key=str.lower):
+        channel_videos = [video for video in videos if video.get('channel_title', 'Sin canal') == channel_title]
+        grouped[channel_title] = sorted(channel_videos, key=lambda video: video.get('published_at') or '', reverse=True)
     return grouped
 
 
@@ -86,6 +128,11 @@ def index():
 
 @app.route('/nuevos-favoritos')
 def favorites_new_videos():
+    view_mode = request.args.get('view', 'channel')
+    valid_view_modes = {'channel', 'date_desc', 'date_asc', 'last_7_days', 'last_30_days'}
+    if view_mode not in valid_view_modes:
+        view_mode = 'channel'
+
     service = yt.get_authenticated_service()
     if not service:
         return "Authentication required or failed for video fetch.", 401
@@ -101,7 +148,8 @@ def favorites_new_videos():
             total_channels=0,
             warning_message=None,
             last_check=last_check,
-            used_cache=False
+            used_cache=False,
+            view_mode=view_mode
         )
 
     fetched_videos = []
@@ -137,16 +185,19 @@ def favorites_new_videos():
         db.replace_favorite_video_cache(videos)
         db.set_last_favorites_check(yt.utc_now_iso())
 
-    videos_by_channel = group_videos_by_channel(videos)
+    videos_by_channel = build_favorites_sections(videos, view_mode)
+    total_channels = len(videos_by_channel) if view_mode == 'channel' else len({video.get('channel_id') for video in videos})
+    total_new_videos = sum(len(group_videos) for group_videos in videos_by_channel.values())
 
     return render_template(
         'favorites_new.html',
         videos_by_channel=videos_by_channel,
-        total_new_videos=len(videos),
-        total_channels=len(videos_by_channel),
+        total_new_videos=total_new_videos,
+        total_channels=total_channels,
         warning_message=warning_message,
         last_check=last_check,
-        used_cache=used_cache
+        used_cache=used_cache,
+        view_mode=view_mode
     )
 
 
