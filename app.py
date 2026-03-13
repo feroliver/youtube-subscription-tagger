@@ -1,6 +1,5 @@
 import logging
 from collections import OrderedDict
-from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify
 import database as db
 import youtube_api as yt
@@ -26,45 +25,6 @@ def group_videos_by_channel(videos):
     return grouped
 
 
-def parse_iso_datetime(value):
-    if not value:
-        return None
-    normalized = value.replace('Z', '+00:00')
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed
-
-
-def build_favorites_sections(videos, view_mode):
-    if view_mode == 'date_desc':
-        sorted_videos = sorted(videos, key=lambda video: video.get('published_at') or '', reverse=True)
-        return OrderedDict([('Todos los canales (más recientes primero)', sorted_videos)])
-
-    if view_mode == 'date_asc':
-        sorted_videos = sorted(videos, key=lambda video: video.get('published_at') or '')
-        return OrderedDict([('Todos los canales (más antiguos primero)', sorted_videos)])
-
-    if view_mode in ('last_7_days', 'last_30_days'):
-        days = 7 if view_mode == 'last_7_days' else 30
-        threshold = datetime.now(timezone.utc) - timedelta(days=days)
-        filtered = []
-        for video in videos:
-            published_at = parse_iso_datetime(video.get('published_at'))
-            if published_at and published_at >= threshold:
-                filtered.append(video)
-        sorted_videos = sorted(filtered, key=lambda video: video.get('published_at') or '')
-        label = f'Todos los canales (últimos {days} días, del más viejo al más nuevo)'
-        return OrderedDict([(label, sorted_videos)])
-
-    grouped = OrderedDict()
-    for channel_title in sorted({video.get('channel_title', 'Sin canal') for video in videos}, key=str.lower):
-        channel_videos = [video for video in videos if video.get('channel_title', 'Sin canal') == channel_title]
-        grouped[channel_title] = sorted(channel_videos, key=lambda video: video.get('published_at') or '', reverse=True)
-    return grouped
 
 
 @app.route('/')
@@ -181,7 +141,7 @@ def favorites_new_videos():
         db.replace_favorite_video_cache(videos)
         db.set_last_favorites_check(yt.utc_now_iso())
 
-    videos_by_channel = build_favorites_sections(videos, 'channel')
+    videos_by_channel = group_videos_by_channel(videos)
     total_channels = len(videos_by_channel)
     total_new_videos = len(videos)
 
