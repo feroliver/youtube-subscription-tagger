@@ -11,7 +11,7 @@
         <h1>Nuevos de favoritos (4★ y 5★)</h1>
         <a href="{{ url_for('index') }}" class="favorites-link-button">← Volver</a>
         <p id="refresh-status">
-            Se encontraron <strong>{{ total_new_videos }}</strong> videos nuevos en <strong>{{ total_channels }}</strong> canales.
+            Se encontraron <strong id="total-new-videos">{{ total_new_videos }}</strong> videos nuevos en <strong id="total-channels">{{ total_channels }}</strong> canales.
             {% if last_check %}
                 Última verificación anterior: {{ last_check }}.
             {% endif %}
@@ -23,36 +23,45 @@
 
     <main class="favorites-page">
         <section class="favorites-view-controls" aria-label="Agrupar y ordenar resultados">
-            <a href="{{ url_for('favorites_new_videos', view='channel') }}" class="favorites-view-button {% if view_mode == 'channel' %}active{% endif %}">Canal</a>
-            <a href="{{ url_for('favorites_new_videos', view='date_desc') }}" class="favorites-view-button {% if view_mode == 'date_desc' %}active{% endif %}">Fecha descendente</a>
-            <a href="{{ url_for('favorites_new_videos', view='date_asc') }}" class="favorites-view-button {% if view_mode == 'date_asc' %}active{% endif %}">Fecha ascendente</a>
-            <a href="{{ url_for('favorites_new_videos', view='last_7_days') }}" class="favorites-view-button {% if view_mode == 'last_7_days' %}active{% endif %}">Últimos 7 días</a>
-            <a href="{{ url_for('favorites_new_videos', view='last_30_days') }}" class="favorites-view-button {% if view_mode == 'last_30_days' %}active{% endif %}">Últimos 30 días</a>
+            <button type="button" class="favorites-view-button active" data-view="channel">Canal</button>
+            <button type="button" class="favorites-view-button" data-view="date_desc">Fecha descendente</button>
+            <button type="button" class="favorites-view-button" data-view="date_asc">Fecha ascendente</button>
+            <button type="button" class="favorites-view-button" data-view="last_7_days">Últimos 7 días</button>
+            <button type="button" class="favorites-view-button" data-view="last_30_days">Últimos 30 días</button>
         </section>
 
-        {% if videos_by_channel %}
-            {% for channel_title, videos in videos_by_channel.items() %}
-                <section class="favorites-channel-group">
-                    <h2>{{ channel_title }} <span>({{ videos|length }})</span></h2>
-                    <ul class="favorites-video-list">
-                        {% for video in videos %}
-                            <li class="favorites-video-item">
-                                <img src="{{ video.thumbnail_url if video.thumbnail_url else url_for('static', filename='placeholder.png') }}" alt="Miniatura de {{ video.title }}" class="favorites-thumbnail">
-                                <div class="favorites-video-meta">
-                                    <a href="{{ video.video_url }}" target="_blank" rel="noopener noreferrer">{{ video.title }}</a>
-                                    <p>Publicado: {{ video.published_at }}</p>
-                                    {% if video.duration_text %}
-                                        <p>Duración: {{ video.duration_text }}</p>
-                                    {% endif %}
-                                </div>
-                            </li>
-                        {% endfor %}
-                    </ul>
-                </section>
-            {% endfor %}
-        {% else %}
-            <p>No hay videos nuevos para mostrar en este momento.</p>
-        {% endif %}
+        <div id="favorites-results">
+            {% if videos_by_channel %}
+                {% for channel_title, videos in videos_by_channel.items() %}
+                    <section class="favorites-channel-group">
+                        <h2>{{ channel_title }} <span>({{ videos|length }})</span></h2>
+                        <ul class="favorites-video-list">
+                            {% for video in videos %}
+                                <li class="favorites-video-item">
+                                    <img src="{{ video.thumbnail_url if video.thumbnail_url else url_for('static', filename='placeholder.png') }}" alt="Miniatura de {{ video.title }}" class="favorites-thumbnail">
+                                    <div class="favorites-video-meta">
+                                        <a href="{{ video.video_url }}" target="_blank" rel="noopener noreferrer">{{ video.title }}</a>
+                                        <p>Publicado: {{ video.published_at }}</p>
+                                        {% if video.duration_text %}
+                                            <p>Duración: {{ video.duration_text }}</p>
+                                        {% endif %}
+                                    </div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </section>
+                {% endfor %}
+            {% else %}
+                <p>No hay videos nuevos para mostrar en este momento.</p>
+            {% endif %}
+        </div>
     </main>
+
+    {% set ns = namespace(all_videos=[]) %}
+    {% for channel_title, channel_videos in videos_by_channel.items() %}
+        {% set ns.all_videos = ns.all_videos + channel_videos %}
+    {% endfor %}
+    <script id="favorites-videos-data" type="application/json" data-placeholder="{{ url_for('static', filename='placeholder.png') }}">{{ ns.all_videos|tojson }}</script>
+    <script src="{{ url_for('static', filename='favorites_new.js') }}"></script>
 </body>
 </html>
