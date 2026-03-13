@@ -1,5 +1,6 @@
 import logging
 from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify
 import database as db
 import youtube_api as yt
@@ -88,6 +89,11 @@ def index():
 
 @app.route('/nuevos-favoritos')
 def favorites_new_videos():
+    view_mode = request.args.get('view', 'channel')
+    valid_view_modes = {'channel', 'date_desc', 'date_asc', 'last_7_days', 'last_30_days'}
+    if view_mode not in valid_view_modes:
+        view_mode = 'channel'
+
     service = yt.get_authenticated_service()
     if not service:
         return "Authentication required or failed for video fetch.", 401
@@ -103,7 +109,8 @@ def favorites_new_videos():
             total_channels=0,
             warning_message=None,
             last_check=last_check,
-            used_cache=False
+            used_cache=False,
+            view_mode=view_mode
         )
 
     fetched_videos = []
@@ -150,7 +157,8 @@ def favorites_new_videos():
         total_channels=total_channels,
         warning_message=warning_message,
         last_check=last_check,
-        used_cache=used_cache
+        used_cache=used_cache,
+        view_mode=view_mode
     )
 
 
