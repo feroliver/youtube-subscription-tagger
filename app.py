@@ -87,6 +87,19 @@ def index():
     )
 
 
+@app.route('/tags')
+def edit_tags():
+    """Dedicated page for editing tag colors."""
+    unique_tags = db.get_unique_tags()
+    tag_colors = db.get_tag_colors()
+    return render_template(
+        'tags.html',
+        unique_tags=unique_tags,
+        tag_colors=tag_colors,
+        DEFAULT_TAG_COLOR=db.DEFAULT_TAG_COLOR
+    )
+
+
 @app.route('/nuevos-favoritos')
 def favorites_new_videos():
     view_mode = request.args.get('view', 'channel')

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YTT — Tags</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <script>
+        (function () {
+            try {
+                var stored = localStorage.getItem('theme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                document.documentElement.setAttribute('data-theme', stored || (prefersDark ? 'dark' : 'light'));
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Editar tags</h1>
+        <a href="{{ url_for('index') }}" class="favorites-link-button">← Volver</a>
+        <button id="theme-toggle" type="button" aria-label="Cambiar tema claro/oscuro" title="Cambiar tema">
+            <svg class="theme-icon-moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.598 1.591a.749.749 0 0 1 .785-.175 7.001 7.001 0 1 1-8.967 8.967.75.75 0 0 1 .961-.96 5.5 5.5 0 0 0 7.046-7.046.75.75 0 0 1 .175-.786Zm1.616 1.945a7 7 0 0 1-7.678 7.678 5.499 5.499 0 1 0 7.678-7.678Z"/></svg>
+            <svg class="theme-icon-sun" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm0-1.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM8 0a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V.75A.75.75 0 0 1 8 0Zm0 13a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 13ZM2.343 2.343a.75.75 0 0 1 1.061 0l1.06 1.061a.75.75 0 0 1-1.06 1.06l-1.06-1.06a.75.75 0 0 1 0-1.06Zm9.193 9.193a.75.75 0 0 1 1.06 0l1.061 1.06a.75.75 0 0 1-1.06 1.061l-1.061-1.06a.75.75 0 0 1 0-1.061ZM16 8a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 16 8ZM3 8a.75.75 0 0 1-.75.75H.75a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 3 8Zm10.657-5.657a.75.75 0 0 1 0 1.061l-1.061 1.06a.75.75 0 1 1-1.06-1.06l1.06-1.06a.75.75 0 0 1 1.061 0Zm-9.193 9.193a.75.75 0 0 1 0 1.06l-1.06 1.061a.75.75 0 1 1-1.061-1.06l1.06-1.061a.75.75 0 0 1 1.061 0Z"/></svg>
+        </button>
+    </header>
+
+    <main class="tags-page">
+        <section class="tags-panel">
+            <header class="tags-panel-header">
+                <h2>Tags ({{ unique_tags|length }})</h2>
+                <p>Hacé click en un tag para cambiarle el color.</p>
+            </header>
+
+            {% if unique_tags %}
+                <div id="all-unique-tags-list" class="tag-list-interactive tags-grid">
+                    {% for tag in unique_tags %}
+                    <div class="tag-entry">
+                        {% set color = tag_colors.get(tag, DEFAULT_TAG_COLOR) %}
+                        <span class="tag-display tag-clickable"
+                              data-tag="{{ tag }}"
+                              title="{{ tag }}"
+                              style="background-color: {{ color }};">
+                            {{ tag }}
+                        </span>
+                        <div class="color-palette hidden">
+                            <button class="color-option" data-color="#ffadad" style="background-color:#ffadad;" title="#ffadad"></button>
+                            <button class="color-option" data-color="#ffd6a5" style="background-color:#ffd6a5;" title="#ffd6a5"></button>
+                            <button class="color-option" data-color="#fdffb6" style="background-color:#fdffb6;" title="#fdffb6"></button>
+                            <button class="color-option" data-color="#caffbf" style="background-color:#caffbf;" title="#caffbf"></button>
+                            <button class="color-option" data-color="#9bf6ff" style="background-color:#9bf6ff;" title="#9bf6ff"></button>
+                            <button class="color-option" data-color="#a0c4ff" style="background-color:#a0c4ff;" title="#a0c4ff"></button>
+                            <button class="color-option" data-color="#bdb2ff" style="background-color:#bdb2ff;" title="#bdb2ff"></button>
+                            <button class="color-option" data-color="#ffc6ff" style="background-color:#ffc6ff;" title="#ffc6ff"></button>
+                            <button class="color-option" data-color="{{ DEFAULT_TAG_COLOR }}" style="background-color:{{ DEFAULT_TAG_COLOR }};" title="Default Color">Reset</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="tags-empty">No hay tags todavía. Asigná tags a los canales desde la página principal.</p>
+            {% endif %}
+        </section>
+    </main>
+
+    <script>
+        window.tagColors = {{ tag_colors|tojson|safe }};
+        window.DEFAULT_TAG_COLOR = '{{ DEFAULT_TAG_COLOR }}';
+    </script>
+    <script src="{{ url_for('static', filename='tag_editor.js') }}"></script>
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</body>
+</html>

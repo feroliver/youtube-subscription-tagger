@@ -9,9 +9,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const interactiveTagList = document.getElementById('all-unique-tags-list'); // Referencia a la lista de tags interactiva
     const searchInput = document.getElementById('channel-search');
 
-    // Obtener la lista de tags únicos del DOM
-    const uniqueTags = Array.from(allUniqueTagsList.querySelectorAll('.tag-display'))
-        .map(span => span.textContent.trim());
+    // Obtener la lista de tags únicos: del DOM si está, o de window.uniqueTags si la sección
+    // de edición de tags vive en otra página.
+    const uniqueTags = allUniqueTagsList
+        ? Array.from(allUniqueTagsList.querySelectorAll('.tag-display')).map(span => span.textContent.trim())
+        : (window.uniqueTags || []);
 
     let newChannelIds = new Set();
     let isNewFilterActive = false;
@@ -204,6 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
             button.className = 'tag-filter';
             button.dataset.tag = tag;
             button.textContent = tag;
+            button.title = tag;
             button.style.backgroundColor = color;
             button.style.borderColor = color;
             if (currentActiveButtons.includes(tag)) {
@@ -220,6 +223,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
          // --- Update "All Unique Tags" Interactive Display List ---
+         // El editor de tags vive en /tags; en esta página puede no estar presente.
+         if (!allUniqueTagsList) return;
          allUniqueTagsList.innerHTML = ''; // Clear existing tags
          uniqueTags.forEach(tag => {
             const color = getTagColor(tag);
