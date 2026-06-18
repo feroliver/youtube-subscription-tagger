@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const channelListContainer = document.getElementById('channels-container');
     const tagFilterList = document.getElementById('tag-filter-list');
+    const ratingFilterList = document.getElementById('rating-filter-list');
     const allUniqueTagsList = document.getElementById('all-unique-tags-list');
     const channelCountSpan = document.getElementById('channel-count');
     const refreshButton = document.getElementById('refresh-button');
@@ -280,7 +281,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return title.includes(searchText) || tags.includes(searchText);
     }
 
-    // Filtra los canales visibles basado en los tags seleccionados
+    function channelMatchesRating(card, selectedRatings) {
+        // Sin filtro activo: pasa todo
+        if (!selectedRatings || selectedRatings.length === 0 || selectedRatings.includes('any')) {
+            return true;
+        }
+        const cardRating = parseInt(card.dataset.rating || '0', 10);
+        return selectedRatings.includes(String(cardRating));
+    }
+
+    // Filtra los canales visibles basado en tags + rating + búsqueda + filtro NEW
     function filterChannelsByTag() {
         if (!channelListContainer) return;
         const cards = channelListContainer.querySelectorAll('.channel-card');
@@ -291,52 +301,42 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedTags = Array.from(tagFilterList.querySelectorAll('.tag-filter.selected'))
             .map(button => button.dataset.tag);
 
-        // Si no hay tags seleccionados o solo está seleccionado "all", mostrar todos
-        if (selectedTags.length === 0 || (selectedTags.length === 1 && selectedTags[0] === 'all')) {
-            cards.forEach(card => {
-                const isNewChannel = card.dataset.isNew === 'true';
-                const passesNewFilter = !isNewFilterActive || isNewChannel;
-                const passesSearch = channelMatchesSearch(card, searchText);
+        // Obtener todos los ratings seleccionados
+        const selectedRatings = Array.from(ratingFilterList?.querySelectorAll('.rating-filter.selected') || [])
+            .map(button => button.dataset.rating);
 
-                if (passesNewFilter && passesSearch) {
-                    card.classList.remove('hidden');
-                    visibleCount++;
-                } else {
-                    card.classList.add('hidden');
-                }
-            });
-        } else {
+        const showAllTags = selectedTags.length === 0 || (selectedTags.length === 1 && selectedTags[0] === 'all');
+
         cards.forEach(card => {
-            let tagsOnCard = [];
-            try {
-                 const tagsData = card.dataset.tags;
-                 tagsOnCard = tagsData ? JSON.parse(tagsData) : [];
-                 if (!Array.isArray(tagsOnCard)) tagsOnCard = [];
-            } catch (e) {
-                 console.error("Error parsing tags data from card:", card.dataset.tags, e);
-                 tagsOnCard = [];
-            }
-
-                // Verificar si el canal tiene TODOS los tags seleccionados
-                const hasAllSelectedTags = selectedTags.every(tag => {
-                    if (tag === 'no-tag') {
-                        return tagsOnCard.length === 0;
-                    }
+            let passesTags = true;
+            if (!showAllTags) {
+                let tagsOnCard = [];
+                try {
+                    const tagsData = card.dataset.tags;
+                    tagsOnCard = tagsData ? JSON.parse(tagsData) : [];
+                    if (!Array.isArray(tagsOnCard)) tagsOnCard = [];
+                } catch (e) {
+                    console.error("Error parsing tags data from card:", card.dataset.tags, e);
+                    tagsOnCard = [];
+                }
+                passesTags = selectedTags.every(tag => {
+                    if (tag === 'no-tag') return tagsOnCard.length === 0;
                     return tagsOnCard.includes(tag);
                 });
+            }
 
-                const isNewChannel = card.dataset.isNew === 'true';
-                const passesNewFilter = !isNewFilterActive || isNewChannel;
-                const passesSearch = channelMatchesSearch(card, searchText);
+            const isNewChannel = card.dataset.isNew === 'true';
+            const passesNewFilter = !isNewFilterActive || isNewChannel;
+            const passesSearch = channelMatchesSearch(card, searchText);
+            const passesRating = channelMatchesRating(card, selectedRatings);
 
-                if (hasAllSelectedTags && passesNewFilter && passesSearch) {
+            if (passesTags && passesRating && passesNewFilter && passesSearch) {
                 card.classList.remove('hidden');
                 visibleCount++;
             } else {
                 card.classList.add('hidden');
             }
         });
-        }
 
         if (channelCountSpan) {
              channelCountSpan.textContent = visibleCount;
@@ -360,6 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
              card.dataset.channelId = channel.channel_id;
              card.dataset.tags = JSON.stringify(channel.tags || []); // Store tags as JSON string
              card.dataset.isNew = newChannelIds.has(channel.channel_id) ? 'true' : 'false';
+             card.dataset.rating = String(Number.isInteger(channel.rating) ? channel.rating : 0);
 
              const tagsHtml = (channel.tags || [])
                  .map(tag => `<span class="tag-display" style="background-color: ${getTagColor(tag)};">${escapeHtml(tag)}</span>`)
@@ -513,6 +514,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Update stars definitively based on server response
                     updateStarsVisual(ratingContainer, result.rating);
 
+                    // Sincronizar data-rating del card y refiltrar por si el filtro de rating está activo
+                    const card = ratingContainer.closest('.channel-card');
+                    if (card) card.dataset.rating = String(result.rating ?? 0);
+                    filterChannelsByTag();
+
                     // OPTIONAL: Re-render the entire channel list to reflect the new order
                     // This is simpler than trying to reorder elements in the DOM
                     // updateChannelList(result.channels);
@@ -572,6 +578,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     filterChannelsByTag();
             }
+        });
+    }
+
+    if (ratingFilterList) {
+        ratingFilterList.addEventListener('click', (event) => {
+            const button = event.target.closest('.rating-filter');
+            if (!button) return;
+            const rating = button.dataset.rating;
+            const anyButton = ratingFilterList.querySelector('.rating-filter[data-rating="any"]');
+
+            if (rating === 'any') {
+                ratingFilterList.querySelectorAll('.rating-filter.selected').forEach(b => b.classList.remove('selected'));
+                button.classList.add('selected');
+            } else {
+                if (anyButton) anyButton.classList.remove('selected');
+                button.classList.toggle('selected');
+                // Si no queda ninguno, volver a "Todas"
+                if (!ratingFilterList.querySelector('.rating-filter.selected') && anyButton) {
+                    anyButton.classList.add('selected');
+                }
+            }
+            filterChannelsByTag();
         });
     }
 
@@ -706,6 +734,22 @@ document.addEventListener('DOMContentLoaded', () => {
             filterChannelsByTag();
         });
     }
+
+    // Botón X para limpiar cualquier input dentro de un wrapper .input-with-clear
+    document.querySelectorAll('.input-with-clear').forEach(wrapper => {
+        const input = wrapper.querySelector('input');
+        const clearBtn = wrapper.querySelector('.input-clear-button');
+        if (!input || !clearBtn) return;
+        const sync = () => { clearBtn.hidden = !input.value; };
+        sync();
+        input.addEventListener('input', sync);
+        clearBtn.addEventListener('click', () => {
+            input.value = '';
+            sync();
+            input.focus();
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    });
 
 }); // End of DOMContentLoaded
 

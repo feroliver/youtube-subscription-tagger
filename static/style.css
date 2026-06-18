@@ -93,8 +93,23 @@ header h1 {
     font-size: 16px;
     font-weight: 600;
     color: var(--color-fg-default);
+}
+
+.header-title {
     flex: 1 1 auto;
     min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.2;
+}
+
+.version-badge {
+    font-size: 11px;
+    color: var(--color-fg-muted);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
 }
 
 #refresh-button,
@@ -261,6 +276,37 @@ header h1 {
     font-weight: 700;
 }
 
+/* === Rating filter === */
+#rating-filter-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.rating-filter {
+    padding: 4px 10px;
+    background-color: var(--color-btn-bg);
+    border: 1px solid var(--color-btn-border);
+    border-radius: 2em;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-fg-default);
+    line-height: 18px;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.rating-filter:hover {
+    background-color: var(--color-btn-hover-bg);
+}
+
+.rating-filter.selected {
+    background-color: var(--color-accent-emphasis);
+    border-color: var(--color-accent-emphasis);
+    color: var(--color-fg-on-emphasis);
+}
+
 #all-unique-tags-list {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -353,7 +399,46 @@ header h1 {
     gap: 12px;
 }
 
-.search-container .channel-search { flex: 1; }
+.search-container .input-with-clear { flex: 1; }
+
+.input-with-clear {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-with-clear .channel-search,
+.input-with-clear input[type="text"],
+.input-with-clear input[type="search"] {
+    width: 100%;
+    padding-right: 32px;
+}
+
+.input-clear-button {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background-color: transparent;
+    border-radius: 50%;
+    color: var(--color-fg-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.input-clear-button:hover {
+    background-color: var(--color-canvas-subtle);
+    color: var(--color-fg-default);
+}
+
+.input-clear-button[hidden] { display: none; }
 
 /* === View toggle (grid/list) === */
 .view-toggle {

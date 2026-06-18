@@ -6,11 +6,17 @@ import database as db
 import youtube_api as yt
 import os
 import urllib.parse
+from version import __version__, __release_date__
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-replace-in-prod')
+
+
+@app.context_processor
+def inject_version():
+    return {"version": __version__, "release_date": __release_date__}
 
 
 def check_authentication():
